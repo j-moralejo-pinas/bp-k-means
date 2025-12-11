@@ -1,8 +1,8 @@
 =============
-package-name
+bp-k-mean
 =============
 
-This is the documentation of **package-name project**.
+This is the documentation of **bp-k-mean project**.
 
 Contents
 ========

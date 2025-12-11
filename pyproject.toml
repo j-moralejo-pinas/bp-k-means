@@ -4,29 +4,29 @@ requires = ["setuptools>=61", "setuptools_scm[toml]>=7", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "package-name"
-description = "A boilerplate for Python projects with CI/CD setup"
+name = "bp-k-mean"
+description = "Boundary Preserving K-Means Algorithm"
 dynamic = ["version"]
 authors = [{ name = "Javier Moralejo Piñas", email = "j.moralejo.pinas@gmail.com" }]
 readme = "README.rst"
 license = { text = "MIT" }
-keywords = []
+keywords = ["ml,", "ai,", "clustering"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent"
 ]
-requires-python = "<3.y,>=3.x"
+requires-python = ">=3.13"
 dependencies = [
     # Add your project dependencies here
 ]
 
 [project.urls]
-Homepage = "https://github.com/j-moralejo-pinas/package-name"
-Changelog = "https://package-name.readthedocs.io/en/latest/CHANGELOG.html"
-Source = "https://github.com/j-moralejo-pinas/package-name"
-Documentation = "https://package-name.readthedocs.io/"
-Tracker = "https://github.com/j-moralejo-pinas/package-name/issues"
+Homepage = "https://github.com/j-moralejo-pinas/bp-k-mean"
+Changelog = "https://bp-k-mean.readthedocs.io/en/latest/CHANGELOG.html"
+Source = "https://github.com/j-moralejo-pinas/bp-k-mean"
+Documentation = "https://bp-k-mean.readthedocs.io/"
+Tracker = "https://github.com/j-moralejo-pinas/bp-k-mean/issues"
 
 
 [tool.setuptools]
@@ -42,7 +42,7 @@ exclude = ["tests"]
 # check out https://github.com/pypa/setuptools_scm
 version_scheme = "guess-next-dev"
 local_scheme = "node-and-date"
-write_to = "src/package_name/_version.py"
+write_to = "src/bp_k_mean/_version.py"
 
 [project.optional-dependencies]
 dev = [
@@ -108,7 +108,7 @@ convention = "numpy"
     "PLR2004", # Magic value used in comparison
     "INP001", # File is part of an implicit namespace package.
 ]
-"src/package_name/_version.py" = [
+"src/bp_k_mean/_version.py" = [
     "ALL",
 ]
 
@@ -127,4 +127,4 @@ close-quotes-on-newline = true
 paths = ["src", "tests"]
 
 [tool.cicd]
-workflow = ""
+workflow = "trunk"

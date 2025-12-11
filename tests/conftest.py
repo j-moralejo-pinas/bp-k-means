@@ -1,5 +1,5 @@
 """
-Dummy conftest.py for package-name.
+Dummy conftest.py for bp-k-mean.
 
 If you don't know what this is for, just leave it empty.
 Read more about conftest.py under:

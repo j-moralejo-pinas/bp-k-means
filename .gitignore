@@ -210,4 +210,4 @@ __marimo__/
 pyrightconfig.local.json
 
 # Version file
-**/_version.py
+**/_version.py.vscode/

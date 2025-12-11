@@ -1,5 +1,5 @@
 """
-package_name
+bp_k_mean
 """
 
 try:
@@ -13,7 +13,7 @@ except ImportError:
         __version__ = "0.0.0"
     else:
         try:
-            __version__ = version("package_name")
+            __version__ = version("bp_k_mean")
         except PackageNotFoundError:
             __version__ = "0.0.0"
         finally:

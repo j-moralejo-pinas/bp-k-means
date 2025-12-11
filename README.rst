@@ -1,8 +1,8 @@
 ============
-package-name
+bp-k-mean
 ============
 
-.. image:: https://img.shields.io/badge/python-3.x+-blue.svg
+.. image:: https://img.shields.io/badge/python-3.13+-blue.svg
     :target: https://www.python.org/downloads/
     :alt: Python Version
 
@@ -19,7 +19,7 @@ This project template provides a solid foundation for Python development with pr
 Development Environment
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-- **Modern Python Setup**: Python 3.x+ with virtual environment configuration
+- **Modern Python Setup**: Python 3.13+ with virtual environment configuration
 - **Code Quality Tools**: Pre-commit hooks, linting with Ruff, formatting with Black
 - **Testing Framework**: Pytest with coverage reporting and configuration
 - **Documentation**: Sphinx-based documentation with automatic API generation
