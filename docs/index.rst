@@ -1,8 +1,8 @@
 =============
-bp-k-mean
+bp-k-means
 =============
 
-This is the documentation of **bp-k-mean project**.
+This is the documentation of **bp-k-means project**.
 
 Contents
 ========

@@ -1,5 +1,5 @@
 ============
-bp-k-mean
+bp-k-means
 ============
 
 .. image:: https://img.shields.io/badge/python-3.13+-blue.svg

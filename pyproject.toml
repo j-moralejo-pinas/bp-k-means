@@ -4,7 +4,7 @@ requires = ["setuptools>=61", "setuptools_scm[toml]>=7", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bp-k-mean"
+name = "bp-k-means"
 description = "Boundary Preserving K-Means Algorithm"
 dynamic = ["version"]
 authors = [{ name = "Javier Moralejo Piñas", email = "j.moralejo.pinas@gmail.com" }]
@@ -22,11 +22,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/j-moralejo-pinas/bp-k-mean"
-Changelog = "https://bp-k-mean.readthedocs.io/en/latest/CHANGELOG.html"
-Source = "https://github.com/j-moralejo-pinas/bp-k-mean"
-Documentation = "https://bp-k-mean.readthedocs.io/"
-Tracker = "https://github.com/j-moralejo-pinas/bp-k-mean/issues"
+Homepage = "https://github.com/j-moralejo-pinas/bp-k-means"
+Changelog = "https://bp-k-means.readthedocs.io/en/latest/CHANGELOG.html"
+Source = "https://github.com/j-moralejo-pinas/bp-k-means"
+Documentation = "https://bp-k-means.readthedocs.io/"
+Tracker = "https://github.com/j-moralejo-pinas/bp-k-means/issues"
 
 
 [tool.setuptools]

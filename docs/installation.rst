@@ -1,7 +1,7 @@
 Installation Guide
 ==================
 
-This guide provides step-by-step instructions for installing and setting up the bp-k-mean project template. Choose the installation section that best fits your needs.
+This guide provides step-by-step instructions for installing and setting up the bp-k-means project template. Choose the installation section that best fits your needs.
 
 .. contents:: Table of Contents
     :local:
@@ -28,16 +28,16 @@ Quick Start
 
 .. code-block::
 
-    git clone https://github.com/j-moralejo-pinas/bp-k-mean.git
-    cd bp-k-mean
+    git clone https://github.com/j-moralejo-pinas/bp-k-means.git
+    cd bp-k-means
 
 2. **Set Up Virtual Environment (Recommended)**: While not mandatory, using a virtual environment is highly recommended to avoid dependency conflicts
 
 .. code-block::
 
     # Using conda (recommended)
-    conda create -n bp-k-mean-env python=3.13
-    conda activate bp-k-mean-env
+    conda create -n bp-k-means-env python=3.13
+    conda activate bp-k-means-env
 
     # OR using venv
     python -m venv venv
@@ -76,8 +76,8 @@ Docker Setup
 
 .. code-block::
 
-    git clone https://github.com/j-moralejo-pinas/bp-k-mean.git
-    cd bp-k-mean
+    git clone https://github.com/j-moralejo-pinas/bp-k-means.git
+    cd bp-k-means
 
 2. **Build the Docker Image**: Build the application using Docker Compose. This will create a Docker image with all necessary dependencies pre-installed
 
@@ -110,15 +110,15 @@ Development Setup
 
 .. code-block::
 
-    git clone https://github.com/j-moralejo-pinas/bp-k-mean.git
-    cd bp-k-mean
+    git clone https://github.com/j-moralejo-pinas/bp-k-means.git
+    cd bp-k-means
 
 2. **Set Up Development Environment**: Create a virtual environment (recommended)
 
 .. code-block::
 
-    conda create -n bp-k-mean-dev python=3.13
-    conda activate bp-k-mean-dev
+    conda create -n bp-k-means-dev python=3.13
+    conda activate bp-k-means-dev
 
 3. **Install in Development Mode**: Install the package with development dependencies
     This installs the project in editable mode with all development tools including:
@@ -150,7 +150,7 @@ Development Setup
 
     {
         "venvPath": "/path/to/your/conda/envs",
-        "venv": "bp-k-mean-dev"
+        "venv": "bp-k-means-dev"
     }
 
 .. [#f1] Replace ``/path/to/your/conda/envs`` with your actual conda environments path (e.g., ``/home/username/miniconda3/envs`` or ``/home/username/micromamba/envs``).
@@ -193,7 +193,7 @@ If you have issues with virtual environments, try
 
     # For conda environments
     conda info --envs  # List all environments
-    conda activate bp-k-mean-dev  # Activate the environment
+    conda activate bp-k-means-dev  # Activate the environment
 
     # For venv environments
     which python  # Check which Python you're using
@@ -215,7 +215,7 @@ If Docker commands fail
 
 **Getting Help**
 
-* Check the project's GitHub issues: https://github.com/j-moralejo-pinas/bp-k-mean/issues
+* Check the project's GitHub issues: https://github.com/j-moralejo-pinas/bp-k-means/issues
 * Review the documentation for detailed usage examples
 * Ensure all dependencies are correctly installed
 

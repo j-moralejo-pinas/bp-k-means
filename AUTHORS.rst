@@ -2,7 +2,7 @@
 Contributors
 ============
 
-The bp-k-mean project is made possible by contributions from the following people:
+The bp-k-means project is made possible by contributions from the following people:
 
 Maintainers
 ===========

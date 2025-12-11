@@ -2,7 +2,7 @@
 Contributing
 ============
 
-We welcome contributions to the bp-k-mean project! This guide will help you get started with contributing to the project.
+We welcome contributions to the bp-k-means project! This guide will help you get started with contributing to the project.
 
 📋 Table of Contents
 ===================
@@ -37,8 +37,8 @@ Fork and Clone
 
 .. code-block:: bash
 
-    git clone https://github.com/j-moralejo-pinas/bp-k-mean.git
-    cd bp-k-mean
+    git clone https://github.com/j-moralejo-pinas/bp-k-means.git
+    cd bp-k-means
 
 Development Setup
 =================
@@ -50,8 +50,8 @@ Environment Setup
 
 .. code-block:: bash
 
-    conda create -n bp-k-mean python=3.13
-    conda activate bp-k-mean
+    conda create -n bp-k-means python=3.13
+    conda activate bp-k-means
 
 2. Install the package in development mode:
 
@@ -104,7 +104,7 @@ When running code during development, use:
 
 .. code-block:: bash
 
-    PYTHONPATH='/path/to/bp-k-mean/src' python your_script.py
+    PYTHONPATH='/path/to/bp-k-means/src' python your_script.py
 
 Branching Model and Workflow
 ============================
@@ -268,7 +268,7 @@ Pyright is configured in ``pyrightconfig.json`` and helps catch type-related err
 
     {
         "venvPath": "/path/to/your/conda/envs",
-        "venv": "bp-k-mean"
+        "venv": "bp-k-means"
     }
 
 Replace ``/path/to/your/conda/envs`` with your actual conda environments path (e.g., ``/home/username/miniconda3/envs`` or ``/home/username/micromamba/envs``).
@@ -507,7 +507,7 @@ Understanding the codebase structure will help you contribute effectively:
 
 .. code-block::
 
-    bp-k-mean/
+    bp-k-means/
     ├── src/                        # Source code
     │   ├── bp_k_mean/           # Main package
     │   └── other_package/          # Additional package
@@ -532,7 +532,7 @@ Code of Conduct
 
 All contributors are expected to adhere to our `Code of Conduct <CODE_OF_CONDUCT.rst>`_.
 
-Thank you for contributing to the bp-k-mean project! 🚀
+Thank you for contributing to the bp-k-means project! 🚀
 
 Issue Reporting
 ===============
@@ -555,7 +555,7 @@ Use this template for any functional issues, including performance problems, cra
     - **OS**: [e.g., Ubuntu 22.04, Windows 11, macOS 13.0]
     - **Python Version**: [e.g., 3.13.y]
     - **Project Version**: [e.g., 1.0.0 or commit hash if using dev]
-    - **Conda Environment**: [e.g., bp-k-mean]
+    - **Conda Environment**: [e.g., bp-k-means]
     - **Hardware** (for performance issues): [CPU, RAM, relevant specs]
 
     ## Steps to Reproduce
