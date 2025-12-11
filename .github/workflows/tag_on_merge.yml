@@ -1,0 +1,14 @@
+name: tag_on_merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  call-reusable:
+    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/tag_on_merge.yml@main
+    secrets: inherit

@@ -1,0 +1,11 @@
+name: dev_pr
+
+on:
+  pull_request:
+    branches:
+      - dev
+
+jobs:
+  call-reusable:
+    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/dev_pr.yml@main
+    secrets: inherit

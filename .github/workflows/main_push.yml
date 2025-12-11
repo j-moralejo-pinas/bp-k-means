@@ -1,0 +1,16 @@
+name: main_push
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  call-reusable:
+    if: github.event.before != '0000000000000000000000000000000000000000'
+    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/main_push.yml@main
+    secrets: inherit

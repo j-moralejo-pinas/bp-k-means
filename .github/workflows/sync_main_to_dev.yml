@@ -1,0 +1,15 @@
+name: sync_main_to_dev
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  call-reusable:
+    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/sync_main_to_dev.yml@main
+    secrets: inherit

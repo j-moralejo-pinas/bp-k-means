@@ -1,0 +1,93 @@
+name: configure_repo
+on:
+  workflow_dispatch:
+    inputs:
+      python_version:
+        description: 'Python version to use'
+        required: true
+        default: '3.13'
+        type: string
+      python_version_max:
+        description: 'Optional maximum Python version (leave empty if not needed)'
+        required: false
+        default: ''
+        type: string
+      repo_topics:
+        description: 'Space-separated repository topics'
+        required: false
+        default: 'python automation'
+        type: string
+      workflow:
+        description: 'Development workflow to use'
+        required: true
+        default: 'gitflow'
+        type: choice
+        options:
+          - gitflow
+          - github_flow
+
+permissions:
+  contents: write  # Need write permission to commit and push changes
+
+jobs:
+  config-repo:
+    name: config-repo
+    # Optional safety gate. Keep if you stored ADMIN_TOKEN in env "prod".
+    environment: main
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure dependencies
+        env:
+          GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          chmod +x ./scripts/init/ensure-dependencies.sh
+          ./scripts/init/ensure-dependencies.sh
+
+      # 1) Get current repo info and initialize project
+      - name: Get repo info and initialize project
+        id: init
+        env:
+          GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          chmod +x ./scripts/init/configure-project.sh
+          ./scripts/init/configure-project.sh \
+            "${{ inputs.python_version }}" \
+            "${{ inputs.python_version_max }}" \
+            "${{ inputs.repo_topics }}" \
+            "${{ inputs.workflow }}"
+
+      # 2) Core settings (only non-defaults) - now with existing values
+      - name: Core repo settings
+        id: core
+        env:
+          GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          chmod +x ./scripts/init/setup-core-settings.sh
+          ./scripts/init/setup-core-settings.sh "$GITHUB_REPOSITORY"
+
+      # 3) Topics
+      - name: Topics
+        env:
+          GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          chmod +x ./scripts/init/setup-topics.sh
+          ./scripts/init/setup-topics.sh "$GITHUB_REPOSITORY" "${{ inputs.repo_topics }}"
+
+      # 4) Workflow token permissions
+      - name: Workflow permissions
+        env:
+          GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          chmod +x ./scripts/init/setup-workflow-permissions.sh
+          ./scripts/init/setup-workflow-permissions.sh "$GITHUB_REPOSITORY"
+
+      # 5) Rulesets (correct schema). Never call /repos//rulesets again.
+      - name: Create or update rulesets
+        env:
+          GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          chmod +x ./scripts/init/setup-rulesets.sh
+          ./scripts/init/setup-rulesets.sh "$GITHUB_REPOSITORY" "${{ inputs.workflow }}"

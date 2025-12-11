@@ -1,0 +1,14 @@
+name: publish_on_tag
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  call-reusable:
+    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/publish_on_tag.yml@main
+    secrets: inherit

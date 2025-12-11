@@ -1,0 +1,130 @@
+[build-system]
+# AVOID CHANGING REQUIRES: IT WILL BE UPDATED BY PYSCAFFOLD!
+requires = ["setuptools>=61", "setuptools_scm[toml]>=7", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "package-name"
+description = "A boilerplate for Python projects with CI/CD setup"
+dynamic = ["version"]
+authors = [{ name = "Javier Moralejo Piñas", email = "j.moralejo.pinas@gmail.com" }]
+readme = "README.rst"
+license = { text = "MIT" }
+keywords = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent"
+]
+requires-python = "<3.y,>=3.x"
+dependencies = [
+    # Add your project dependencies here
+]
+
+[project.urls]
+Homepage = "https://github.com/j-moralejo-pinas/package-name"
+Changelog = "https://package-name.readthedocs.io/en/latest/CHANGELOG.html"
+Source = "https://github.com/j-moralejo-pinas/package-name"
+Documentation = "https://package-name.readthedocs.io/"
+Tracker = "https://github.com/j-moralejo-pinas/package-name/issues"
+
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["tests"]
+
+[tool.setuptools_scm]
+# For smarter version schemes and other configuration options,
+# check out https://github.com/pypa/setuptools_scm
+version_scheme = "guess-next-dev"
+local_scheme = "node-and-date"
+write_to = "src/package_name/_version.py"
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pyright",
+    "pre-commit",
+    "ruff",
+    "pydoclint",
+    "docformatter",
+    "pytest",
+    "pytest-cov",
+    "pyupgrade"
+]
+docs = ["sphinx", "sphinx-autoapi", "sphinx-linkfix", "sphinx-rtd-theme"]
+format = ["ruff", "docformatter", "pyupgrade"]
+code-quality = ["ruff", "pydoclint", "pyright"]
+test = ["pytest", "pytest-cov"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "tests"]
+addopts = "-ra --strict-markers"
+# norecursedirs = ["build", "dist"]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+]
+
+[tool.ruff]
+fix = true
+unsafe-fixes = true
+line-length = 100
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 100
+
+[tool.ruff.lint]
+ignore = [
+    "S101", # Use of `assert` for testing purposes
+    "COM812", # Add commas at the end of an iterable
+    "S311", # Standard pseudo-random generators are not suitable for cryptographic purposes
+    "TD003", # Missing issue link for this TODO
+    "FIX001", # Line contains FIXME, consider resolving the issue
+    "FIX002", # Line contains TODO, consider resolving the issue
+    "PLR0913",  # Too many arguments in function definition
+    "PLR0915", # Too many statements
+    "ANN401", # Dynamically typed expressions (typing.Any) are disallowed in `**kwargs`
+]
+select = ["ALL"]
+exclude = ["docs/*"] # "tests/*"
+
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 100
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "SLF001", # Private member accessed
+    "PLR2004", # Magic value used in comparison
+    "INP001", # File is part of an implicit namespace package.
+]
+"src/package_name/_version.py" = [
+    "ALL",
+]
+
+[tool.pydoclint]
+style = 'numpy'
+
+[tool.docformatter]
+style = 'numpy'
+wrap-summaries = 100
+wrap-descriptions = 100
+pre-summary-newline = true
+close-quotes-on-newline = true
+
+[tool.vulture]
+# min_confidence = 80
+paths = ["src", "tests"]
+
+[tool.cicd]
+workflow = ""

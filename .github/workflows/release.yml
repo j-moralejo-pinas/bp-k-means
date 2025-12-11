@@ -1,0 +1,25 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Type of release: major, minor, or patch (default: minor)'
+        required: false
+        default: 'minor'
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  call-reusable:
+    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/release.yml@main
+    with:
+      release_type: ${{ inputs.release_type || 'minor' }}
+    secrets: inherit

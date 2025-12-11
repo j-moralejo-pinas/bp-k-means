@@ -1,0 +1,12 @@
+{
+  "typeCheckingMode": "basic",
+  "include": [
+    "src",
+    "tests"
+  ],
+  "exclude": [],
+  "extraPaths": [
+    "src"
+  ],
+  "extends": "./pyrightconfig.local.json"
+}

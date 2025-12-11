@@ -1,0 +1,49 @@
+{
+    "terminal.integrated.env.linux": {"PYTHONPATH": "${workspaceFolder}/src"},
+    "python.analysis.autoImportCompletions": true,
+    "python.defaultInterpreterPath": "/home/user_name/micromamba/envs/env_name/bin/python",
+    "cSpell.language": "en,es",
+    "cSpell.dictionaries": [
+        "css",
+        "docker",
+        "django",
+        "data-science",
+        "data-science-models",
+        "data-science-tools",
+        "git",
+        "html",
+        "latex",
+        "makefile",
+        "python",
+        "python-common",
+    ],
+    "python.autoComplete.extraPaths": [
+        "src"
+    ],
+    "cSpell.words": [
+    ],
+    "cSpell.caseSensitive": false,
+    "cSpell.ignoreWords": [
+    ],
+    "github.copilot.chat.codesearch.enabled": true,
+    "accessibility.voice.autoSynthesize": "off",
+    "accessibility.voice.keywordActivation": "chatInView",
+    "chat.agent.maxRequests": 150,
+    "chat.edits2.enabled": false,
+    "chat.tools.autoApprove": true,
+    "inlineChat.lineEmptyHint": true,
+    "github.copilot.nextEditSuggestions.fixes": true,
+    "github.copilot.chat.agent.thinkingTool": true,
+    "github.copilot.chat.edits.temporalContext.enabled": true,
+    "github.copilot.chat.editor.temporalContext.enabled": true,
+    "github.copilot.chat.codeGeneration.instructions": [
+        {
+            "text": "When running the code, always use conda activate env_name && PYTHONPATH='${workspaceFolder}/src' /home/user_name/micromamba/envs/env_name/bin/python"
+        }
+    ],
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+}
