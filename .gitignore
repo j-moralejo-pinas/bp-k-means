@@ -211,3 +211,8 @@ pyrightconfig.local.json
 
 # Version file
 **/_version.py.vscode/
+
+*.parquet
+*.json
+*.csv
+*.pyspy
