@@ -5,13 +5,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from bp_k_means.experimental_bisecting_k_means import divisive_kmeans_by_label
-from bp_k_means.bisecting_k_means_optimized import bisecting_kmeans_by_label_optimized
-from bp_k_means.experimental_bpk_means import experimental_bp_kmeans
-from bp_k_means.bp_k_means_optimized import bp_kmeans_optimized
+from bp_k_means.bisecting_k_means_optimized import (
+    bisecting_kmeans_by_label_optimized,
+    bisecting_kmeans_by_label_optimized_no_refine,
+)
+from bp_k_means.bp_k_means_optimized import bp_kmeans_optimized, precomputed_bp_kmeans_optimized
 from bp_k_means.cop_k_means import cop_kmeans_by_class
-from bp_k_means.hac import hac_ward_by_label
+from bp_k_means.hac import hac_ward_nnc_by_label
 from bp_k_means.main import overall_wcss
+from bp_k_means.precomputed_bisecting_k_means_optimized import (
+    precomputed_bisecting_kmeans_by_label_optimized,
+    precomputed_bisecting_kmeans_by_label_optimized_no_refine,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -39,25 +44,6 @@ def run_cop_kmeans(X, y, k, seed, n_init, init_ensure_class):
     return best_labels
 
 
-def run_bisecting_kmeans(X, y, k, seed, n_init, refine_clusters=False):
-    rng = np.random.default_rng(seed)
-    best_wcss = float("inf")
-    best_labels = None
-
-    for i in range(n_init):
-        current_seed = rng.integers(2**32)
-        labels = divisive_kmeans_by_label(
-            X, y, target_k=k, seed=current_seed, refine_clusters=refine_clusters
-        )
-
-        wcss = overall_wcss(X, labels)
-        if wcss < best_wcss:
-            best_wcss = wcss
-            best_labels = labels
-
-    return best_labels
-
-
 def run_benchmark():
     datasets_dir = Path("data/datasets")
     dataset_files = list(datasets_dir.glob("*.parquet"))
@@ -75,88 +61,57 @@ def run_benchmark():
     results = []
 
     algorithms = [
-        # (
-        #     "BP-KMeans",
-        #     lambda X, y, k, seed, n_init: experimental_bp_kmeans(
-        #         X, y, k, seed=seed, n_init=n_init, reuse_centroids=0
-        #     ),
-        # ),
-        # (
-        #     "BP-KMeans Reuse",
-        #     lambda X, y, k, seed, n_init: experimental_bp_kmeans(
-        #         X, y, k, seed=seed, n_init=n_init, reuse_centroids=1
-        #     ),
-        # ),
-        # (
-        #     "BP-KMeans Reuse Split",
-        #     lambda X, y, k, seed, n_init: experimental_bp_kmeans(
-        #         X, y, k, seed=seed, n_init=n_init, reuse_centroids=2
-        #     ),
-        # ),
-        # (
-        #     "BP-KMeans WCSS/Cluster",
-        #     lambda X, y, k, seed, n_init: experimental_bp_kmeans(
-        #         X, y, k, seed=seed, n_init=n_init, reuse_centroids=0, use_wcss_per_cluster=True
-        #     ),
-        # ),
-        # (
-        #     "BP-KMeans Reuse WCSS/Cluster",
-        #     lambda X, y, k, seed, n_init: experimental_bp_kmeans(
-        #         X,
-        #         y,
-        #         k,
-        #         seed=seed,
-        #         n_init=n_init,
-        #         reuse_centroids=1,
-        #         use_wcss_per_cluster=True,
-        #     ),
-        # ),
-        # (
-        #     "BP-KMeans Reuse Split WCSS/Cluster",
-        #     lambda X, y, k, seed, n_init: experimental_bp_kmeans(
-        #         X,
-        #         y,
-        #         k,
-        #         seed=seed,
-        #         n_init=n_init,
-        #         reuse_centroids=2,
-        #         use_wcss_per_cluster=True,
-        #     ),
-        # ),
         (
-            "BP-KMeans Optimized",
-            lambda X, y, k, seed, n_init: bp_kmeans_optimized(X, y, k, seed=seed, n_init=n_init),
+            "BP-KMeans Optimized (WCSS/Cluster)",
+            lambda X, y, k, seed, n_init: bp_kmeans_optimized(
+                X, y, k, seed=seed, n_init=n_init, use_wcss_per_cluster=True
+            ),
         ),
-        # (
-        #     "COP-KMeans",
-        #     lambda X, y, k, seed, n_init: run_cop_kmeans(
-        #         X, y, k, seed=seed, n_init=n_init, init_ensure_class=False
-        #     ),
-        # ),
-        # (
-        #     "COP-KMeans Special",
-        #     lambda X, y, k, seed, n_init: run_cop_kmeans(
-        #         X, y, k, seed=seed, n_init=n_init, init_ensure_class=True
-        #     ),
-        # ),
-        # ("HAC-Ward", lambda X, y, k, seed, n_init: hac_ward_by_label(X, y, target_k=k)),
-        # (
-        #     "Bisecting KMeans",
-        #     lambda X, y, k, seed, n_init: run_bisecting_kmeans(
-        #         X, y, k, seed, n_init, refine_clusters=False
-        #     ),
-        # ),
-        # (
-        #     "Bisecting KMeans Refined",
-        #     lambda X, y, k, seed, n_init: run_bisecting_kmeans(
-        #         X, y, k, seed, n_init, refine_clusters=True
-        #     ),
-        # ),
         (
-            "Bisecting KMeans Optimized",
-            lambda X, y, k, seed, n_init: bisecting_kmeans_by_label_optimized(
+            "BP-KMeans Optimized (Total WCSS)",
+            lambda X, y, k, seed, n_init: bp_kmeans_optimized(
+                X, y, k, seed=seed, n_init=n_init, use_wcss_per_cluster=False
+            ),
+        ),
+        (
+            "Precomputed BP-KMeans Optimized",
+            lambda X, y, k, seed, n_init: precomputed_bp_kmeans_optimized(
                 X, y, k, seed=seed, n_init=n_init
             ),
+        ),
+        (
+            "Bisecting Optimized (Refine, WCSS/Cluster)",
+            lambda X, y, k, seed, n_init: bisecting_kmeans_by_label_optimized(
+                X, y, k, seed=seed, n_init=n_init, use_wcss_per_cluster=True
+            ),
+        ),
+        (
+            "Bisecting Optimized (Refine, Total WCSS)",
+            lambda X, y, k, seed, n_init: bisecting_kmeans_by_label_optimized(
+                X, y, k, seed=seed, n_init=n_init, use_wcss_per_cluster=False
+            ),
+        ),
+        (
+            "Bisecting Optimized (No Refine)",
+            lambda X, y, k, seed, n_init: bisecting_kmeans_by_label_optimized_no_refine(
+                X, y, k, seed=seed, n_init=n_init
+            ),
+        ),
+        (
+            "Precomputed Bisecting (Refine)",
+            lambda X, y, k, seed, n_init: precomputed_bisecting_kmeans_by_label_optimized(
+                X, y, k, seed=seed, n_init=n_init
+            ),
+        ),
+        (
+            "Precomputed Bisecting (No Refine)",
+            lambda X, y, k, seed, n_init: precomputed_bisecting_kmeans_by_label_optimized_no_refine(
+                X, y, k, seed=seed, n_init=n_init
+            ),
+        ),
+        (
+            "HAC Ward (NNC)",
+            lambda X, y, k, seed, n_init: hac_ward_nnc_by_label(X, y, target_k=k),
         ),
     ]
 
@@ -185,7 +140,8 @@ def run_benchmark():
 
             for n_init in n_inits:
                 for alg_name, alg_func in algorithms:
-                    if alg_name == "HAC-Ward" and n_init > 1:
+                    # Skip HAC for n_init > 1 as it is deterministic
+                    if "HAC" in alg_name and n_init > 1:
                         continue
 
                     logger.info(
@@ -222,7 +178,6 @@ def run_benchmark():
                             "Clusters": n_clusters,
                         }
                     )
-
 
     # Save results
     if results:

@@ -18,7 +18,9 @@ classifiers = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    # Add your project dependencies here
+    "numpy",
+    "pyarrow",
+    "osmnx"
 ]
 
 [project.urls]
@@ -42,7 +44,7 @@ exclude = ["tests"]
 # check out https://github.com/pypa/setuptools_scm
 version_scheme = "guess-next-dev"
 local_scheme = "node-and-date"
-write_to = "src/bp_k_mean/_version.py"
+write_to = "src/bp_k_means/_version.py"
 
 [project.optional-dependencies]
 dev = [

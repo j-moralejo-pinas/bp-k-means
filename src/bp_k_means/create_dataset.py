@@ -276,42 +276,42 @@ if __name__ == "__main__":
         },
     )
 
-    # build_dataset_for_place(
-    #     place="Ajalvir, Madrid, Spain",
-    #     outfile="madrid_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "28",
-    #         "CMUN": "002",
-    #     },
-    # )
+    build_dataset_for_place(
+        place="Ajalvir, Madrid, Spain",
+        outfile="madrid_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "28",
+            "CMUN": "002",
+        },
+    )
 
-    # build_dataset_for_place(
-    #     place="Becerril de la Sierra, Madrid, Spain",
-    #     outfile="becerril_de_la_sierra_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "28",
-    #         "CMUN": "018",
-    #     },
-    # )
+    build_dataset_for_place(
+        place="Becerril de la Sierra, Madrid, Spain",
+        outfile="becerril_de_la_sierra_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "28",
+            "CMUN": "018",
+        },
+    )
 
-    # build_dataset_for_place(
-    #     place="Aranjuez, Madrid, Spain",
-    #     outfile="aranjuez_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "28",
-    #         "CMUN": "013",
-    #     },
-    # )
+    build_dataset_for_place(
+        place="Aranjuez, Madrid, Spain",
+        outfile="aranjuez_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "28",
+            "CMUN": "013",
+        },
+    )
 
-    # build_dataset_for_place(
-    #     place="Gijón, Asturias, Spain",
-    #     outfile="gijon_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "33",
-    #         "CMUN": "024",
-    #     },
-    # )
+    build_dataset_for_place(
+        place="Gijón, Asturias, Spain",
+        outfile="gijon_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "33",
+            "CMUN": "024",
+        },
+    )

@@ -144,6 +144,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Nix dev environment
+.direnv/
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -210,7 +213,9 @@ __marimo__/
 pyrightconfig.local.json
 
 # Version file
-**/_version.py.vscode/
+**/_version.py
+
+.vscode/
 
 *.parquet
 *.json

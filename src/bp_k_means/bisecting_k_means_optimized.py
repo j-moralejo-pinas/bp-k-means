@@ -3,7 +3,6 @@ import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
-from scipy import cluster
 
 from bp_k_means.k_means import kmeans, kmeans_plus_plus_init
 
@@ -13,7 +12,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_init=10):
+def bisecting_kmeans_by_label_optimized(
+    X, y, target_k, seed=42, n_init=10, *, use_wcss_per_cluster=True
+):
     """
     Divisive hierarchical clustering (bisecting k-means) with label constraint.
     Optimized version using heaps and pre-calculated squared norms.
@@ -33,15 +34,15 @@ def bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_init=10):
     y = np.asarray(y)
     n_samples, dim = X.shape
 
-    unique_labels, y_inverse = np.unique(y, return_inverse=True)
-    n_labels = len(unique_labels)
+    unique_classes, y_inverse = np.unique(y, return_inverse=True)
+    n_classes = len(unique_classes)
 
     if n_init < 1:
         raise ValueError("n_init must be >= 1")
 
-    if target_k < n_labels:
+    if target_k < n_classes:
         raise ValueError(
-            f"target_k={target_k} < number of labels={n_labels}. "
+            f"target_k={target_k} < number of labels={n_classes}. "
             f"With label-pure clusters you cannot go below that."
         )
 
@@ -62,44 +63,58 @@ def bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_init=10):
     idx_groups = np.split(order, splits)
 
     # Data structures per label (using 0..n_labels-1 as key)
-    points_per_label = groups
-    indices_per_label = idx_groups
-    X2_per_label = []
+    points_per_class = groups
+    indices_per_class = idx_groups
+    X2_per_class = []
 
-    centroids_per_label: list[NDArray] = []
-    local_labels_per_label: list[NDArray] = []
-    sum_X2_per_label: list[float] = []
-    generation_per_label = [0] * n_labels
+    centroids_per_class: list[NDArray] = []
+    local_labels_per_class: list[NDArray] = []
+    sum_X2_per_class: list[float] = []
+    generation_per_class = [0] * n_classes
 
     cluster_heap = []
 
     current_total_clusters = 0
 
-    for lbl_idx in range(n_labels):
+    for lbl_idx in range(n_classes):
         current_total_clusters += 1
 
-        pts = points_per_label[lbl_idx]
+        pts = points_per_class[lbl_idx]
 
         local_labels = np.zeros(pts.shape[0], dtype=int)
-        local_labels_per_label.append(local_labels)
+        local_labels_per_class.append(local_labels)
 
         # TODO(Javier): We should check that all points are not identical
         if pts.shape[0] < 2:
-            X2_per_label.append(None)
-            centroids_per_label.append(pts[0][None, :])
+            X2_per_class.append(None)
+            sum_X2_per_class.append(0.0)
+            centroids_per_class.append(pts[0][None, :])
             continue
 
         X2 = np.einsum("ij,ij->i", pts, pts)
         sum_X2 = np.sum(X2)
-        X2_per_label.append(X2)
-        sum_X2_per_label.append(sum_X2)
+        X2_per_class.append(X2)
+        sum_X2_per_class.append(sum_X2)
 
         centroid = pts.mean(axis=0)
-        centroids_per_label.append(centroid[None, :])
+        centroids_per_class.append(centroid[None, :])
 
         wcss = sum_X2 - pts.shape[0] * (centroid @ centroid)
 
-        heapq.heappush(cluster_heap, (-wcss, lbl_idx, 0, 0))
+        heapq.heappush(
+            cluster_heap,
+            (
+                -wcss / 2
+                if (
+                    use_wcss_per_cluster
+                    and pts.shape[0] > centroids_per_class[lbl_idx].shape[0] + 1
+                )
+                else -wcss,
+                lbl_idx,
+                0,
+                0,
+            ),
+        )
 
     while current_total_clusters < target_k:
         if not cluster_heap:
@@ -107,14 +122,14 @@ def bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_init=10):
 
         _, lbl_idx, local_idx, gen = heapq.heappop(cluster_heap)
 
-        if gen != generation_per_label[lbl_idx]:
+        if gen != generation_per_class[lbl_idx]:
             # Stale entry
             continue
 
-        pts = points_per_label[lbl_idx]
-        X2 = X2_per_label[lbl_idx]
-        sum_X2 = sum_X2_per_label[lbl_idx]
-        current_centroids = centroids_per_label[lbl_idx]
+        pts = points_per_class[lbl_idx]
+        X2 = X2_per_class[lbl_idx]
+        sum_X2 = sum_X2_per_class[lbl_idx]
+        current_centroids = centroids_per_class[lbl_idx]
 
         best_wcss_total = float("inf")
 
@@ -125,7 +140,7 @@ def bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_init=10):
         new_centroids[:local_idx] = current_centroids[:local_idx]
         new_centroids[local_idx:-2] = current_centroids[local_idx + 1 :]
 
-        cluster_pts = pts[local_labels_per_label[lbl_idx] == local_idx]
+        cluster_pts = pts[local_labels_per_class[lbl_idx] == local_idx]
 
         for _ in range(n_init):
             if cluster_pts.shape[0] == 2:
@@ -145,9 +160,9 @@ def bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_init=10):
                 best_new_labels = new_lbls
                 best_new_centroids = new_ctrs
 
-        centroids_per_label[lbl_idx] = best_new_centroids
-        local_labels_per_label[lbl_idx] = best_new_labels
-        generation_per_label[lbl_idx] += 1
+        centroids_per_class[lbl_idx] = best_new_centroids
+        local_labels_per_class[lbl_idx] = best_new_labels
+        generation_per_class[lbl_idx] += 1
 
         new_k = best_new_centroids.shape[0]
         counts = np.bincount(best_new_labels, minlength=new_k)
@@ -162,7 +177,14 @@ def bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_init=10):
             if counts[k] > 1:
                 heapq.heappush(
                     cluster_heap,
-                    (-wcss_per_cluster[k], lbl_idx, k, generation_per_label[lbl_idx]),
+                    (
+                        -wcss_per_cluster[k] / (new_k + 1)
+                        if (use_wcss_per_cluster and pts.shape[0] > new_k + 1)
+                        else -wcss_per_cluster[k],
+                        lbl_idx,
+                        k,
+                        generation_per_class[lbl_idx],
+                    ),
                 )
 
         current_total_clusters += 1
@@ -171,11 +193,11 @@ def bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_init=10):
 
     global_cluster_counter = 0
 
-    for lbl_idx in range(n_labels):
-        l_indices = indices_per_label[lbl_idx]
-        l_centroids = centroids_per_label[lbl_idx]
+    for lbl_idx in range(n_classes):
+        l_indices = indices_per_class[lbl_idx]
+        l_centroids = centroids_per_class[lbl_idx]
 
-        labels_final[l_indices] = local_labels_per_label[lbl_idx] + global_cluster_counter
+        labels_final[l_indices] = local_labels_per_class[lbl_idx] + global_cluster_counter
 
         global_cluster_counter += l_centroids.shape[0]
 
@@ -202,15 +224,15 @@ def bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, seed=42, n_ini
     y = np.asarray(y)
     n_samples, dim = X.shape
 
-    unique_labels, y_inverse = np.unique(y, return_inverse=True)
-    n_labels = len(unique_labels)
+    unique_classes, y_inverse = np.unique(y, return_inverse=True)
+    n_classes = len(unique_classes)
 
     if n_init < 1:
         raise ValueError("n_init must be >= 1")
 
-    if target_k < n_labels:
+    if target_k < n_classes:
         raise ValueError(
-            f"target_k={target_k} < number of labels={n_labels}. "
+            f"target_k={target_k} < number of classes={n_classes}. "
             f"With label-pure clusters you cannot go below that."
         )
 
@@ -228,35 +250,35 @@ def bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, seed=42, n_ini
     groups = np.split(X_sorted, splits)
     idx_groups = np.split(order, splits)
 
-    points_per_label = groups
-    indices_per_label = idx_groups
-    X2_per_label = []
+    points_per_class = groups
+    indices_per_class = idx_groups
+    X2_per_class = []
 
-    centroids_per_label: list[NDArray] = []
-    local_labels_per_label: list[NDArray] = []
+    centroids_per_class: list[NDArray] = []
+    local_labels_per_class: list[NDArray] = []
 
     cluster_heap = []
     current_total_clusters = 0
 
     # Initialization
-    for lbl_idx in range(n_labels):
+    for lbl_idx in range(n_classes):
         current_total_clusters += 1
-        pts = points_per_label[lbl_idx]
+        pts = points_per_class[lbl_idx]
 
         local_labels = np.zeros(pts.shape[0], dtype=int)
-        local_labels_per_label.append(local_labels)
+        local_labels_per_class.append(local_labels)
 
         if pts.shape[0] < 2:
-            X2_per_label.append(None)
-            centroids_per_label.append(pts[0][None, :])
+            X2_per_class.append(None)
+            centroids_per_class.append(pts[0][None, :])
             continue
 
         X2 = np.einsum("ij,ij->i", pts, pts)
         sum_X2 = np.sum(X2)
-        X2_per_label.append(X2)
+        X2_per_class.append(X2)
 
         centroid = pts.mean(axis=0)
-        centroids_per_label.append(centroid[None, :])
+        centroids_per_class.append(centroid[None, :])
 
         wcss = sum_X2 - pts.shape[0] * (centroid @ centroid)
 
@@ -269,11 +291,10 @@ def bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, seed=42, n_ini
 
         _, lbl_idx, local_idx = heapq.heappop(cluster_heap)
 
-        pts = points_per_label[lbl_idx]
-        X2 = X2_per_label[lbl_idx]
-
+        pts = points_per_class[lbl_idx]
+        X2 = X2_per_class[lbl_idx]
         # Identify points in this cluster
-        mask = local_labels_per_label[lbl_idx] == local_idx
+        mask = local_labels_per_class[lbl_idx] == local_idx
         cluster_pts = pts[mask]
         cluster_X2 = X2[mask]
 
@@ -291,17 +312,13 @@ def bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, seed=42, n_ini
             else:
                 init_c = kmeans_plus_plus_init(cluster_pts, 2, rng)
 
-            sub_labels, sub_centroids = kmeans(
-                cluster_pts, k=2, seed=rng, init_centroids=init_c
-            )
+            sub_labels, sub_centroids = kmeans(cluster_pts, k=2, seed=rng, init_centroids=init_c)
 
             # Calculate WCSS for this split
             counts = np.bincount(sub_labels, minlength=2)
             sub_X2_sums = np.bincount(sub_labels, weights=cluster_X2, minlength=2)
 
-            wcss_split = sub_X2_sums - counts * np.einsum(
-                "ij,ij->i", sub_centroids, sub_centroids
-            )
+            wcss_split = sub_X2_sums - counts * np.einsum("ij,ij->i", sub_centroids, sub_centroids)
             total_wcss = np.sum(wcss_split)
 
             if total_wcss < best_wcss_total:
@@ -313,7 +330,7 @@ def bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, seed=42, n_ini
 
         # Apply the best split
         # 1. Update centroids
-        current_centroids = centroids_per_label[lbl_idx]
+        current_centroids = centroids_per_class[lbl_idx]
         new_centroids_arr = np.empty(
             (current_centroids.shape[0] + 1, dim), dtype=current_centroids.dtype
         )
@@ -322,19 +339,17 @@ def bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, seed=42, n_ini
         new_centroids_arr[local_idx] = best_sub_centroids[0]
         new_centroids_arr[-1] = best_sub_centroids[1]
 
-        centroids_per_label[lbl_idx] = new_centroids_arr
+        centroids_per_class[lbl_idx] = new_centroids_arr
 
         # 2. Update labels
         new_idx = current_centroids.shape[0]
         indices_to_update = np.flatnonzero(mask)
         indices_to_change = indices_to_update[best_sub_labels == 1]
-        local_labels_per_label[lbl_idx][indices_to_change] = new_idx
+        local_labels_per_class[lbl_idx][indices_to_change] = new_idx
 
         # 3. Push new clusters to heap
         if best_counts[0] > 1:
-            heapq.heappush(
-                cluster_heap, (-best_wcss_per_cluster[0], lbl_idx, local_idx)
-            )
+            heapq.heappush(cluster_heap, (-best_wcss_per_cluster[0], lbl_idx, local_idx))
 
         if best_counts[1] > 1:
             heapq.heappush(cluster_heap, (-best_wcss_per_cluster[1], lbl_idx, new_idx))
@@ -345,11 +360,11 @@ def bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, seed=42, n_ini
     labels_final = np.empty(n_samples, dtype=int)
     global_cluster_counter = 0
 
-    for lbl_idx in range(n_labels):
-        l_indices = indices_per_label[lbl_idx]
-        l_centroids = centroids_per_label[lbl_idx]
+    for lbl_idx in range(n_classes):
+        l_indices = indices_per_class[lbl_idx]
+        l_centroids = centroids_per_class[lbl_idx]
 
-        labels_final[l_indices] = local_labels_per_label[lbl_idx] + global_cluster_counter
+        labels_final[l_indices] = local_labels_per_class[lbl_idx] + global_cluster_counter
         global_cluster_counter += l_centroids.shape[0]
 
     return labels_final
