@@ -49,7 +49,7 @@ def run_benchmark():
     dataset_files = list(datasets_dir.glob("*.parquet"))
 
     # Exclude if madrid dataset is present
-    dataset_files = [f for f in dataset_files if "madrid" not in f.name.lower()]
+    # dataset_files = [f for f in dataset_files if "madrid" not in f.name.lower()]
 
     if not dataset_files:
         logger.error(f"No parquet files found in {datasets_dir}")

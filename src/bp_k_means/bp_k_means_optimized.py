@@ -103,26 +103,29 @@ def bp_kmeans_optimized(X, y, target_k, seed=42, n_init=10, *, use_wcss_per_clus
 
         best_wcss = float("inf")
 
+        n_clusters_to_initialize = 2
+
+        wcss_per_cluster = np.bincount(local_labels, weights=X2, minlength=curr_k) - np.bincount(
+            local_labels, minlength=curr_k
+        ) * np.einsum("ij,ij->i", current_centroids, current_centroids)
+
+        # Compute WCSS per cluster
+        max_wcss_idx = np.argmax(wcss_per_cluster)
+
+        init_centroids = np.empty((new_k, X.shape[1]), dtype=X.dtype)
+        init_centroids[:max_wcss_idx] = current_centroids[:max_wcss_idx]
+        init_centroids[max_wcss_idx:-n_clusters_to_initialize] = current_centroids[
+            max_wcss_idx + 1 :
+        ]
+        target_pts = pts[local_labels == max_wcss_idx]
+
         for _ in range(n_init):
-            wcss_per_cluster = np.bincount(
-                local_labels, weights=X2, minlength=curr_k
-            ) - np.bincount(local_labels, minlength=curr_k) * np.einsum(
-                "ij,ij->i", current_centroids, current_centroids
-            )
-
-            # Compute WCSS per cluster
-            max_wcss_idx = np.argmax(wcss_per_cluster)
-
-            init_centroids = np.empty((new_k, X.shape[1]), dtype=X.dtype)
-            init_centroids[:max_wcss_idx] = current_centroids[:max_wcss_idx]
-            init_centroids[max_wcss_idx:-2] = current_centroids[max_wcss_idx + 1 :]
-            target_pts = pts[local_labels == max_wcss_idx]
-            if len(target_pts) == 2:
+            if len(target_pts) <= n_clusters_to_initialize:
                 new_centroids = target_pts
             else:
-                new_centroids = kmeans_plus_plus_init(target_pts, 2, rng)
+                new_centroids = kmeans_plus_plus_init(target_pts, n_clusters_to_initialize, rng)
 
-            init_centroids[-2:] = new_centroids
+            init_centroids[-n_clusters_to_initialize:] = new_centroids
 
             lbls, ctrs = kmeans(pts, new_k, seed=rng, init_centroids=init_centroids)
             counts = np.bincount(lbls, minlength=new_k)
@@ -250,31 +253,34 @@ def precomputed_bp_kmeans_optimized(X, y, target_k, seed=42, n_init=10):
         best_labels = None
         best_centroids = None
 
+        n_clusters_to_initialize = 2
+
+        wcss_per_cluster = np.bincount(local_labels, weights=X2, minlength=curr_k) - np.bincount(
+            local_labels, minlength=curr_k
+        ) * np.einsum("ij,ij->i", current_centroids, current_centroids)
+
+        max_wcss_idx = np.argmax(wcss_per_cluster)
+
+        init_centroids = np.empty((new_k, X.shape[1]), dtype=X.dtype)
+        init_centroids[:max_wcss_idx] = current_centroids[:max_wcss_idx]
+        init_centroids[max_wcss_idx:-n_clusters_to_initialize] = current_centroids[
+            max_wcss_idx + 1 :
+        ]
+
+        target_pts = pts[local_labels == max_wcss_idx]
+
         # Precompute loop
         for _ in range(n_init):
             # Same initialization strategy as optimized script
-            wcss_per_cluster = np.bincount(
-                local_labels, weights=X2, minlength=curr_k
-            ) - np.bincount(local_labels, minlength=curr_k) * np.einsum(
-                "ij,ij->i", current_centroids, current_centroids
-            )
 
-            max_wcss_idx = np.argmax(wcss_per_cluster)
-
-            init_centroids = np.empty((new_k, X.shape[1]), dtype=X.dtype)
-            init_centroids[:max_wcss_idx] = current_centroids[:max_wcss_idx]
-            init_centroids[max_wcss_idx:-2] = current_centroids[max_wcss_idx + 1 :]
-
-            target_pts = pts[local_labels == max_wcss_idx]
-
-            if len(target_pts) == 2:
+            if len(target_pts) == n_clusters_to_initialize:
                 new_centroids = target_pts
-            elif len(target_pts) < 2:
+            elif len(target_pts) < n_clusters_to_initialize:
                 continue
             else:
-                new_centroids = kmeans_plus_plus_init(target_pts, 2, rng)
+                new_centroids = kmeans_plus_plus_init(target_pts, n_clusters_to_initialize, rng)
 
-            init_centroids[-2:] = new_centroids
+            init_centroids[-n_clusters_to_initialize:] = new_centroids
 
             lbls, ctrs = kmeans(pts, new_k, seed=rng, init_centroids=init_centroids)
             counts_k = np.bincount(lbls, minlength=new_k)
