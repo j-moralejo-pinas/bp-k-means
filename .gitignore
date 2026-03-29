@@ -221,3 +221,5 @@ pyrightconfig.local.json
 *.json
 *.csv
 *.pyspy
+
+datasets
