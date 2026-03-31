@@ -8,15 +8,12 @@ import numpy as np
 import pandas as pd
 
 from bp_k_means.bisecting_k_means_optimized import (
-    bisecting_kmeans_by_label_optimized,
     bisecting_kmeans_by_label_optimized_no_refine,
 )
-from bp_k_means.bp_k_means_optimized import bp_kmeans_optimized, precomputed_bp_kmeans_optimized
 from bp_k_means.cop_k_means import cop_kmeans_by_class
 from bp_k_means.hac import hac_ward_nnc_by_label
 from bp_k_means.main import overall_wcss
 from bp_k_means.precomputed_bisecting_k_means_optimized import (
-    precomputed_bisecting_kmeans_by_label_optimized,
     precomputed_bisecting_kmeans_by_label_optimized_no_refine,
 )
 
@@ -171,57 +168,46 @@ def run_benchmark():
     k_multipliers = [1.5, 2, 4, 8, 16, 32]
 
     algorithms = [
-        (
-            "BP-KMeans Optimized (WCSS/Cluster)",
-            lambda X, y, k, seed, n_init: bp_kmeans_optimized(
-                X, y, k, seed=seed, n_init=n_init, use_wcss_per_cluster=True
-            ),
-        ),
-        (
-            "BP-KMeans Optimized (Total WCSS)",
-            lambda X, y, k, seed, n_init: bp_kmeans_optimized(
-                X, y, k, seed=seed, n_init=n_init, use_wcss_per_cluster=False
-            ),
-        ),
-        (
-            "Precomputed BP-KMeans Optimized",
-            lambda X, y, k, seed, n_init: precomputed_bp_kmeans_optimized(
-                X, y, k, seed=seed, n_init=n_init
-            ),
-        ),
-        (
-            "Bisecting Optimized (Refine, WCSS/Cluster)",
-            lambda X, y, k, seed, n_init: bisecting_kmeans_by_label_optimized(
-                X, y, k, seed=seed, n_init=n_init, use_wcss_per_cluster=True
-            ),
-        ),
-        (
-            "Bisecting Optimized (Refine, Total WCSS)",
-            lambda X, y, k, seed, n_init: bisecting_kmeans_by_label_optimized(
-                X, y, k, seed=seed, n_init=n_init, use_wcss_per_cluster=False
-            ),
-        ),
-        (
-            "Bisecting Optimized (No Refine)",
-            lambda X, y, k, seed, n_init: bisecting_kmeans_by_label_optimized_no_refine(
-                X, y, k, seed=seed, n_init=n_init
-            ),
-        ),
-        (
-            "Precomputed Bisecting (Refine)",
-            lambda X, y, k, seed, n_init: precomputed_bisecting_kmeans_by_label_optimized(
-                X, y, k, seed=seed, n_init=n_init
-            ),
-        ),
-        (
-            "Precomputed Bisecting (No Refine)",
-            lambda X, y, k, seed, n_init: precomputed_bisecting_kmeans_by_label_optimized_no_refine(
-                X, y, k, seed=seed, n_init=n_init
-            ),
-        ),
+        *[
+            (
+                f"BP-KMeans ({ranking.name}, {init.name})",
+                lambda X, y, k, seed, n_init, r=ranking, i=init: bp_kmeans(
+                    X, y, k, seed=seed, n_init=n_init, ranking=r, init=i
+                ),
+                n_init,
+            )
+            for ranking in RankingStrategy
+            for init in InitStrategy
+            for n_init in n_inits
+        ],
+        *[
+            (
+                "Bisecting Optimized (No Refine)",
+                lambda X, y, k, seed, n_init: bisecting_kmeans_by_label_optimized_no_refine(
+                    X, y, k, seed=seed, n_init=n_init
+                ),
+                n_init,
+            )
+            for n_init in n_inits
+        ],
+        *[
+            (
+                "Precomputed Bisecting (No Refine)",
+                lambda X,
+                y,
+                k,
+                seed,
+                n_init: precomputed_bisecting_kmeans_by_label_optimized_no_refine(
+                    X, y, k, seed=seed, n_init=n_init
+                ),
+                n_init,
+            )
+            for n_init in n_inits
+        ],
         (
             "HAC Ward (NNC)",
             lambda X, y, k, seed, n_init: hac_ward_nnc_by_label(X, y, target_k=k),
+            1,
         ),
     ]
 
@@ -248,45 +234,38 @@ def run_benchmark():
                 )
                 continue
 
-            for n_init in n_inits:
-                for alg_name, alg_func in algorithms:
-                    # Skip HAC for n_init > 1 as it is deterministic
-                    if "HAC" in alg_name and n_init > 1:
-                        continue
+            for alg_name, alg_func, n_init in algorithms:
+                logger.info(f"  Running {alg_name} | k={target_k} (x{k_mult}) | n_init={n_init}")
 
-                    logger.info(
-                        f"  Running {alg_name} | k={target_k} (x{k_mult}) | n_init={n_init}"
+                start_time = time.time()
+
+                labels = alg_func(X, y, target_k, seed=42, n_init=n_init)
+                end_time = time.time()
+                duration = end_time - start_time
+
+                if labels is None:
+                    logger.error(f"    {alg_name} failed to produce labels.")
+                    wcss = np.nan
+                    n_clusters = 0
+                else:
+                    wcss = overall_wcss(X, labels)
+                    n_clusters = len(np.unique(labels))
+                    _save_run_outputs(
+                        dataset_name=dataset_path.stem,
+                        alg_name=alg_name,
+                        k=target_k,
+                        k_mult=k_mult,
+                        n_init=n_init,
+                        X=X,
+                        y=y,
+                        labels=labels,
+                        duration=duration,
+                        wcss=wcss,
                     )
 
-                    start_time = time.time()
-
-                    labels = alg_func(X, y, target_k, seed=42, n_init=n_init)
-                    end_time = time.time()
-                    duration = end_time - start_time
-
-                    if labels is None:
-                        logger.error(f"    {alg_name} failed to produce labels.")
-                        wcss = np.nan
-                        n_clusters = 0
-                    else:
-                        wcss = overall_wcss(X, labels)
-                        n_clusters = len(np.unique(labels))
-                        _save_run_outputs(
-                            dataset_name=dataset_path.stem,
-                            alg_name=alg_name,
-                            k=target_k,
-                            k_mult=k_mult,
-                            n_init=n_init,
-                            X=X,
-                            y=y,
-                            labels=labels,
-                            duration=duration,
-                            wcss=wcss,
-                        )
-
-                    logger.info(
-                        f"    -> Time: {duration:.4f}s | WCSS: {wcss:.4f} | Clusters: {n_clusters}"
-                    )
+                logger.info(
+                    f"    -> Time: {duration:.4f}s | WCSS: {wcss:.4f} | Clusters: {n_clusters}"
+                )
 
 
 if __name__ == "__main__":
