@@ -223,3 +223,4 @@ pyrightconfig.local.json
 *.pyspy
 
 datasets
+output

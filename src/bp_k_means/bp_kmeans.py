@@ -1,0 +1,464 @@
+"""
+Unified BP-KMeans: greedy label-constrained clustering with configurable ranking
+and initialization strategies.
+"""
+
+import heapq
+import logging
+from enum import Enum
+from typing import TYPE_CHECKING
+
+import numpy as np
+
+from bp_k_means.k_means import kmeans, kmeans_plus_plus_init
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
+logger = logging.getLogger(__name__)
+
+
+class RankingStrategy(Enum):
+    """Ranking strategies for label selection.
+
+    R_L:   Total WCSS of the label's clusters.
+    R_C:   Maximum single-cluster WCSS within the label.
+    R_ERL: Estimated WCSS reduction (label-level), scaled by k_y / (k_y + 1).
+    R_ERC: Estimated WCSS reduction (cluster-level), scaled by k_y / (k_y + 1).
+    R_RL:  Exact WCSS reduction via precomputed trial split.
+    """
+
+    WCSS_LABEL = 1
+    WCSS_CLUSTER = 2
+    EST_REDUCTION_LABEL = 3
+    EST_REDUCTION_CLUSTER = 4
+    REDUCTION_LABEL = 5
+
+
+class InitStrategy(Enum):
+    """Initialization strategies for centroid expansion.
+
+    LABEL_REINIT:        Re-initialize all centroids for the label via k-means++.
+    ADD_CENTROID_LABEL:   Keep existing centroids, add one new via k-means++.
+    CLUSTER_REINIT:       Replace highest-WCSS cluster centroid with two new centroids.
+    ADD_CENTROID_CLUSTER: Keep highest-WCSS cluster centroid, add one new within it.
+    """
+
+    LABEL_REINIT = 1
+    ADD_CENTROID_LABEL = 2
+    CLUSTER_REINIT = 3
+    ADD_CENTROID_CLUSTER = 4
+
+
+def _wcss_per_cluster(
+    local_labels: "NDArray", X2: "NDArray", centroids: "NDArray", k: int
+) -> "NDArray":
+    """WCSS per cluster: sum(||x||^2 for x in c) - n_c * ||mu_c||^2."""
+    return np.bincount(local_labels, weights=X2, minlength=k) - np.bincount(
+        local_labels, minlength=k
+    ) * np.einsum("ij,ij->i", centroids, centroids)
+
+
+def _compute_rank(
+    ranking: RankingStrategy,
+    wcss_total: float,
+    local_labels: "NDArray",
+    X2: "NDArray",
+    centroids: "NDArray",
+    k_y: int,
+    n_y: int,
+) -> float:
+    """Compute the ranking score for a label."""
+    if ranking == RankingStrategy.WCSS_LABEL:
+        return wcss_total
+
+    if ranking == RankingStrategy.WCSS_CLUSTER:
+        return float(np.max(_wcss_per_cluster(local_labels, X2, centroids, k_y)))
+
+    if ranking == RankingStrategy.EST_REDUCTION_LABEL:
+        if k_y >= n_y:
+            return 0.0
+        if k_y == n_y - 1:
+            return wcss_total
+        return wcss_total * k_y / (k_y + 1)
+
+    if ranking == RankingStrategy.EST_REDUCTION_CLUSTER:
+        if k_y >= n_y:
+            return 0.0
+        max_wcss = float(np.max(_wcss_per_cluster(local_labels, X2, centroids, k_y)))
+        if k_y == n_y - 1:
+            return max_wcss
+        return max_wcss * k_y / (k_y + 1)
+
+    raise ValueError(f"Unsupported ranking strategy: {ranking}")
+
+
+def _build_init_centroids(
+    strategy: InitStrategy,
+    pts: "NDArray",
+    current_centroids: "NDArray",
+    curr_k: int,
+    new_k: int,
+    rng: np.random.Generator,
+    target_pts: "NDArray | None" = None,
+    max_wcss_idx: "int | None" = None,
+) -> "NDArray":
+    """Build initial centroids for a k-means run with new_k clusters."""
+    dim = pts.shape[1]
+
+    if strategy == InitStrategy.LABEL_REINIT:
+        if pts.shape[0] <= new_k:
+            return pts[:new_k]
+        return kmeans_plus_plus_init(pts, new_k, rng)
+
+    if strategy == InitStrategy.ADD_CENTROID_LABEL:
+        if pts.shape[0] <= new_k:
+            return pts[:new_k]
+        return kmeans_plus_plus_init(pts, new_k, rng, existing_centroids=current_centroids)
+
+    if strategy == InitStrategy.CLUSTER_REINIT:
+        if len(target_pts) < 2:
+            # Fallback: full re-init when the target cluster has too few points
+            return kmeans_plus_plus_init(pts, new_k, rng)
+        init_c = np.empty((new_k, dim), dtype=pts.dtype)
+        init_c[:max_wcss_idx] = current_centroids[:max_wcss_idx]
+        init_c[max_wcss_idx : new_k - 2] = current_centroids[max_wcss_idx + 1 :]
+        if len(target_pts) == 2:
+            init_c[-2:] = target_pts
+        else:
+            init_c[-2:] = kmeans_plus_plus_init(target_pts, 2, rng)
+        return init_c
+
+    if strategy == InitStrategy.ADD_CENTROID_CLUSTER:
+        init_c = np.empty((new_k, dim), dtype=pts.dtype)
+        init_c[:curr_k] = current_centroids
+        if len(target_pts) <= 1:
+            init_c[curr_k] = target_pts[0]
+        else:
+            new_c = kmeans_plus_plus_init(
+                target_pts,
+                2,
+                rng,
+                existing_centroids=current_centroids[max_wcss_idx : max_wcss_idx + 1],
+            )
+            init_c[curr_k] = new_c[1]
+        return init_c
+
+    raise ValueError(f"Unsupported init strategy: {strategy}")
+
+
+def _run_split(
+    pts: "NDArray",
+    X2: "NDArray",
+    sum_X2: float,
+    local_labels: "NDArray",
+    current_centroids: "NDArray",
+    curr_k: int,
+    new_k: int,
+    n_init: int,
+    rng: np.random.Generator,
+    init_strategy: InitStrategy,
+) -> "tuple[float, NDArray, NDArray]":
+    """Run n_init k-means attempts with new_k clusters.
+
+    Returns (best_wcss, best_labels, best_centroids).
+    """
+    target_pts = None
+    max_wcss_idx = None
+    if init_strategy in (InitStrategy.CLUSTER_REINIT, InitStrategy.ADD_CENTROID_CLUSTER):
+        wcss_per = _wcss_per_cluster(local_labels, X2, current_centroids, curr_k)
+        max_wcss_idx = int(np.argmax(wcss_per))
+        target_pts = pts[local_labels == max_wcss_idx]
+
+    best_wcss = float("inf")
+    best_labels = local_labels
+    best_centroids = current_centroids
+
+    for _ in range(n_init):
+        init_centroids = _build_init_centroids(
+            init_strategy,
+            pts,
+            current_centroids,
+            curr_k,
+            new_k,
+            rng,
+            target_pts,
+            max_wcss_idx,
+        )
+        lbls, ctrs = kmeans(pts, new_k, seed=rng, init_centroids=init_centroids, X2=X2)
+        counts = np.bincount(lbls, minlength=new_k)
+        wcss = sum_X2 - np.sum(counts * np.einsum("ij,ij->i", ctrs, ctrs))
+
+        if wcss < best_wcss:
+            best_wcss = wcss
+            best_labels = lbls
+            best_centroids = ctrs
+
+    return best_wcss, best_labels, best_centroids
+
+
+def bp_kmeans(
+    X,
+    y,
+    target_k,
+    seed=42,
+    n_init=10,
+    *,
+    ranking: RankingStrategy = RankingStrategy.EST_REDUCTION_LABEL,
+    init: InitStrategy = InitStrategy.CLUSTER_REINIT,
+):
+    """
+    BP-KMeans: greedy label-constrained clustering.
+
+    Iteratively selects the label with the highest ranking score and increases
+    its number of clusters by one, re-running k-means on that label's points.
+
+    Parameters
+    ----------
+    X : array-like, shape (n, d)
+        Dataset.
+    y : array-like, shape (n,)
+        Pre-existing categorical labels.
+    target_k : int
+        Desired total number of clusters.
+    seed : int or np.random.Generator
+        Random seed.
+    n_init : int
+        Number of k-means restarts per split.
+    ranking : RankingStrategy
+        Label selection strategy.
+    init : InitStrategy
+        Centroid expansion strategy.
+
+    Returns
+    -------
+    labels : ndarray, shape (n,)
+        Cluster assignments in [0, target_k).
+    """
+    rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
+    X = np.asarray(X)
+    y = np.asarray(y)
+    _, y = np.unique(y, return_inverse=True)
+
+    n_samples = X.shape[0]
+    classes = np.unique(y)
+    n_classes = len(classes)
+
+    if target_k > n_samples:
+        raise ValueError("target_k cannot be larger than number of data points")
+    if target_k < n_classes:
+        raise ValueError("target_k cannot be smaller than number of unique classes in y")
+    if target_k == n_samples:
+        return np.arange(n_samples)
+
+    # Global cluster ID tracking: each class starts with one cluster
+    global_cluster_of_class: dict[int, list[int]] = {}
+    current_cluster_id = 0
+    for c in classes:
+        global_cluster_of_class[c] = [current_cluster_id]
+        current_cluster_id += 1
+
+    # Pre-organize data by label (sorted for cache-friendly access)
+    order = np.argsort(y)
+    X_sorted = X[order]
+    y_sorted = y[order]
+
+    counts = np.bincount(y_sorted)
+    split_indices = np.cumsum(counts)[:-1]
+
+    groups = np.split(X_sorted, split_indices)
+    idx_groups = np.split(order, split_indices)
+    unique_y_vals = np.nonzero(counts)[0]
+
+    points_per_class = dict(zip(unique_y_vals, groups, strict=True))
+    idx_per_class = dict(zip(unique_y_vals, idx_groups, strict=True))
+
+    # Per-class state: centroids, local labels, WCSS, precomputed squared norms
+    centroids_per_class: dict[int, "NDArray"] = {}
+    class_labels: dict[int, "NDArray"] = {}
+    wcss_per_class: dict[int, float] = {}
+    X2_per_class: dict[int, "NDArray"] = {}
+    sum_X2_per_class: dict[int, float] = {}
+
+    for c in classes:
+        pts = points_per_class[c]
+        X2 = np.einsum("ij,ij->i", pts, pts)
+        X2_per_class[c] = X2
+        sum_X2_per_class[c] = float(np.sum(X2))
+
+        centroid = pts.mean(axis=0)
+        centroids_per_class[c] = centroid[None, :]
+
+        wcss = float(X2.sum() - pts.shape[0] * (centroid @ centroid))
+        wcss_per_class[c] = wcss
+        class_labels[c] = np.zeros(pts.shape[0], dtype=int)
+
+    # Dispatch to precomputed variant for exact-reduction ranking
+    if ranking == RankingStrategy.REDUCTION_LABEL:
+        return _bp_kmeans_precomputed(
+            classes,
+            target_k,
+            n_init,
+            rng,
+            init,
+            points_per_class,
+            idx_per_class,
+            centroids_per_class,
+            class_labels,
+            wcss_per_class,
+            X2_per_class,
+            sum_X2_per_class,
+            global_cluster_of_class,
+            current_cluster_id,
+            n_samples,
+        )
+
+    # Build initial heap (max-heap via negation)
+    heap: list[tuple[float, int]] = []
+    for c in classes:
+        score = _compute_rank(
+            ranking,
+            wcss_per_class[c],
+            class_labels[c],
+            X2_per_class[c],
+            centroids_per_class[c],
+            1,
+            points_per_class[c].shape[0],
+        )
+        heap.append((-score, c))
+    heapq.heapify(heap)
+
+    # Main loop: split the highest-ranked label until target_k clusters
+    while current_cluster_id < target_k:
+        logger.debug("BP-KMeans: %d / %d clusters", current_cluster_id, target_k)
+
+        _, worst_class = heapq.heappop(heap)
+
+        pts = points_per_class[worst_class]
+        X2 = X2_per_class[worst_class]
+        sum_X2 = sum_X2_per_class[worst_class]
+        current_centroids = centroids_per_class[worst_class]
+        curr_k = current_centroids.shape[0]
+        new_k = curr_k + 1
+
+        best_wcss, best_labels, best_centroids = _run_split(
+            pts,
+            X2,
+            sum_X2,
+            class_labels[worst_class],
+            current_centroids,
+            curr_k,
+            new_k,
+            n_init,
+            rng,
+            init,
+        )
+
+        class_labels[worst_class] = best_labels
+        centroids_per_class[worst_class] = best_centroids
+        wcss_per_class[worst_class] = best_wcss
+
+        score = _compute_rank(
+            ranking,
+            best_wcss,
+            best_labels,
+            X2,
+            best_centroids,
+            new_k,
+            pts.shape[0],
+        )
+        heapq.heappush(heap, (-score, worst_class))
+
+        global_cluster_of_class[worst_class].append(current_cluster_id)
+        current_cluster_id += 1
+
+    # Reconstruct global labels
+    labels_global = np.empty(n_samples, dtype=int)
+    for c in classes:
+        global_ids = np.array(global_cluster_of_class[c], dtype=int)
+        labels_global[idx_per_class[c]] = global_ids[class_labels[c]]
+
+    return labels_global
+
+
+def _bp_kmeans_precomputed(
+    classes,
+    target_k,
+    n_init,
+    rng,
+    init_strategy,
+    points_per_class,
+    idx_per_class,
+    centroids_per_class,
+    class_labels,
+    wcss_per_class,
+    X2_per_class,
+    sum_X2_per_class,
+    global_cluster_of_class,
+    current_cluster_id,
+    n_samples,
+):
+    """R_RL variant: precompute trial splits to rank by exact WCSS reduction."""
+    pending_splits: dict[int, tuple[float, "NDArray", "NDArray"]] = {}
+    heap: list[tuple[float, int]] = []
+
+    def precompute_next_split(c: int) -> None:
+        pts = points_per_class[c]
+        current_centroids = centroids_per_class[c]
+        curr_k = current_centroids.shape[0]
+        new_k = curr_k + 1
+
+        if pts.shape[0] <= curr_k:
+            return
+
+        best_wcss, best_labels, best_centroids = _run_split(
+            pts,
+            X2_per_class[c],
+            sum_X2_per_class[c],
+            class_labels[c],
+            current_centroids,
+            curr_k,
+            new_k,
+            n_init,
+            rng,
+            init_strategy,
+        )
+
+        reduction = wcss_per_class[c] - best_wcss
+        heapq.heappush(heap, (-reduction, c))
+        pending_splits[c] = (best_wcss, best_labels, best_centroids)
+
+    # Initial precomputation for all classes
+    for c in classes:
+        precompute_next_split(c)
+
+    # Iterative splitting by highest actual WCSS reduction
+    while current_cluster_id < target_k:
+        if not heap:
+            break
+
+        _, best_c = heapq.heappop(heap)
+
+        if best_c not in pending_splits:
+            continue
+
+        next_wcss, next_labels, next_centroids = pending_splits.pop(best_c)
+
+        centroids_per_class[best_c] = next_centroids
+        class_labels[best_c] = next_labels
+        wcss_per_class[best_c] = next_wcss
+
+        global_cluster_of_class[best_c].append(current_cluster_id)
+        current_cluster_id += 1
+
+        logger.debug("BP-KMeans (precomputed): %d / %d clusters", current_cluster_id, target_k)
+
+        precompute_next_split(best_c)
+
+    # Reconstruct global labels
+    labels_global = np.empty(n_samples, dtype=int)
+    for c in classes:
+        global_ids = np.array(global_cluster_of_class[c], dtype=int)
+        labels_global[idx_per_class[c]] = global_ids[class_labels[c]]
+
+    return labels_global

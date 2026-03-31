@@ -50,7 +50,7 @@ def kmeans_plus_plus_init(X, k, seed: int | np.random.Generator = 42, existing_c
     return centroids
 
 
-def kmeans(X, k, max_iter=300, seed: int | np.random.Generator = 42, init_centroids=None):
+def kmeans(X, k, max_iter=300, seed: int | np.random.Generator = 42, init_centroids=None, X2=None):
     rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
     n, d = X.shape
 
@@ -64,7 +64,8 @@ def kmeans(X, k, max_iter=300, seed: int | np.random.Generator = 42, init_centro
 
     labels = np.full(n, -1, dtype=int)
 
-    X2 = np.einsum("ij,ij->i", X, X)
+    if X2 is None:
+        X2 = np.einsum("ij,ij->i", X, X)
 
     for _ in range(max_iter):
         dist = (
