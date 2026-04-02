@@ -36,8 +36,8 @@ def kmeans_plus_plus_init(X, k, seed: int | np.random.Generator = 42, existing_c
         closest_dist_sq = np.maximum(closest_dist_sq, 0.0)
         sum_sq = closest_dist_sq.sum()
         if sum_sq > 0:
-            probs = closest_dist_sq / sum_sq
-            idx = rng.choice(n, p=probs)
+            r = rng.random() * sum_sq
+            idx = np.searchsorted(np.cumsum(closest_dist_sq), r)
         else:
             idx = rng.integers(n)
 
@@ -46,6 +46,60 @@ def kmeans_plus_plus_init(X, k, seed: int | np.random.Generator = 42, existing_c
 
         new_dist_sq = X2 + (c @ c) - 2 * (X @ c)
         closest_dist_sq = np.minimum(closest_dist_sq, new_dist_sq)
+
+    return centroids
+
+
+def subsampled_kmeans_plus_plus_init(
+    X, k, subsample_size, seed: int | np.random.Generator = 42, existing_centroids=None
+):
+    """K-means++ initialisation on a random subsample of X.
+
+    Selects `subsample_size` points uniformly without replacement, then runs
+    standard k-means++ on that subset.  All centroids are drawn from the
+    subsample, keeping complexity O(k * subsample_size) instead of O(k * n).
+    """
+    rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
+    n = X.shape[0]
+
+    actual_size = min(subsample_size, n)
+    sub_idx = rng.choice(n, size=actual_size, replace=False)
+    X_sub = X[sub_idx]
+
+    return kmeans_plus_plus_init(X_sub, k, seed=rng, existing_centroids=existing_centroids)
+
+
+def random_init(X, k, seed: int | np.random.Generator = 42, existing_centroids=None):
+    """Random initialisation: pick k distinct points uniformly at random.
+
+    If `existing_centroids` is provided, only the remaining slots are filled
+    with new random points, and no new centroid will duplicate an existing one.
+    """
+    rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
+    n, d = X.shape
+    centroids = np.empty((k, d))
+
+    start_idx = 0
+    candidate_idx = np.arange(n)
+
+    if existing_centroids is not None and len(existing_centroids) > 0:
+        n_existing = existing_centroids.shape[0]
+        if n_existing > k:
+            msg = f"Existing centroids ({n_existing}) > k ({k})"
+            raise ValueError(msg)
+        centroids[:n_existing] = existing_centroids
+        start_idx = n_existing
+
+        # exclude points that coincide with an existing centroid
+        is_existing = np.any(
+            np.all(X[:, None, :] == existing_centroids[None, :, :], axis=2), axis=1
+        )
+        candidate_idx = np.flatnonzero(~is_existing)
+
+    n_new = k - start_idx
+    if n_new > 0:
+        chosen = rng.choice(candidate_idx, size=n_new, replace=False)
+        centroids[start_idx:] = X[chosen]
 
     return centroids
 

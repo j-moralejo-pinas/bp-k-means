@@ -59,7 +59,7 @@ class TestRankingStrategies:
     @pytest.mark.parametrize("ranking", list(RankingStrategy))
     def test_all_rankings_produce_valid_output(self, sample_data, ranking):
         X, y = sample_data
-        labels = bp_kmeans(X, y, target_k=9, seed=42, ranking=ranking)
+        labels = bp_kmeans(X, y, target_k=9, seed=42, ranking_strategy=ranking)
         assert labels.shape == (X.shape[0],)
         assert len(np.unique(labels)) == 9
         # Label consistency
@@ -71,7 +71,7 @@ class TestInitStrategies:
     @pytest.mark.parametrize("init", list(InitStrategy))
     def test_all_inits_produce_valid_output(self, sample_data, init):
         X, y = sample_data
-        labels = bp_kmeans(X, y, target_k=9, seed=42, init=init)
+        labels = bp_kmeans(X, y, target_k=9, seed=42, init_strategy=init)
         assert labels.shape == (X.shape[0],)
         assert len(np.unique(labels)) == 9
         for cluster_id in np.unique(labels):
@@ -83,7 +83,7 @@ class TestAllCombinations:
     @pytest.mark.parametrize("init", list(InitStrategy))
     def test_all_ranking_init_combinations(self, sample_data, ranking, init):
         X, y = sample_data
-        labels = bp_kmeans(X, y, target_k=6, seed=42, ranking=ranking, init=init)
+        labels = bp_kmeans(X, y, target_k=6, seed=42, ranking_strategy=ranking, init_strategy=init)
         assert labels.shape == (X.shape[0],)
         assert len(np.unique(labels)) == 6
         for cluster_id in np.unique(labels):

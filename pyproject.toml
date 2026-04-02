@@ -7,21 +7,19 @@ build-backend = "setuptools.build_meta"
 name = "bp-k-means"
 description = "Boundary Preserving K-Means Algorithm"
 dynamic = ["version"]
-authors = [{ name = "Javier Moralejo Piñas", email = "j.moralejo.pinas@gmail.com" }]
+authors = [
+    { name = "Javier Moralejo Piñas", email = "j.moralejo.pinas@gmail.com" },
+]
 readme = "README.rst"
 license = { text = "MIT" }
 keywords = ["ml,", "ai,", "clustering"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent"
+    "Operating System :: OS Independent",
 ]
 requires-python = ">=3.13"
-dependencies = [
-    "numpy",
-    "pyarrow",
-    "osmnx"
-]
+dependencies = ["numpy", "pyarrow", "osmnx"]
 
 [project.urls]
 Homepage = "https://github.com/j-moralejo-pinas/bp-k-means"
@@ -56,7 +54,8 @@ dev = [
     "docformatter",
     "pytest",
     "pytest-cov",
-    "pyupgrade"
+    "pyupgrade",
+    "py-spy",
 ]
 docs = ["sphinx", "sphinx-autoapi", "sphinx-linkfix", "sphinx-rtd-theme"]
 format = ["ruff", "docformatter", "pyupgrade"]
@@ -71,8 +70,7 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["src"]
-omit = [
-]
+omit = []
 
 [tool.ruff]
 fix = true
@@ -85,15 +83,15 @@ docstring-code-line-length = 100
 
 [tool.ruff.lint]
 ignore = [
-    "S101", # Use of `assert` for testing purposes
-    "COM812", # Add commas at the end of an iterable
-    "S311", # Standard pseudo-random generators are not suitable for cryptographic purposes
-    "TD003", # Missing issue link for this TODO
-    "FIX001", # Line contains FIXME, consider resolving the issue
-    "FIX002", # Line contains TODO, consider resolving the issue
-    "PLR0913",  # Too many arguments in function definition
+    "S101",    # Use of `assert` for testing purposes
+    "COM812",  # Add commas at the end of an iterable
+    "S311",    # Standard pseudo-random generators are not suitable for cryptographic purposes
+    "TD003",   # Missing issue link for this TODO
+    "FIX001",  # Line contains FIXME, consider resolving the issue
+    "FIX002",  # Line contains TODO, consider resolving the issue
+    "PLR0913", # Too many arguments in function definition
     "PLR0915", # Too many statements
-    "ANN401", # Dynamically typed expressions (typing.Any) are disallowed in `**kwargs`
+    "ANN401",  # Dynamically typed expressions (typing.Any) are disallowed in `**kwargs`
 ]
 select = ["ALL"]
 exclude = ["docs/*"] # "tests/*"
@@ -106,13 +104,11 @@ convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = [
-    "SLF001", # Private member accessed
+    "SLF001",  # Private member accessed
     "PLR2004", # Magic value used in comparison
-    "INP001", # File is part of an implicit namespace package.
+    "INP001",  # File is part of an implicit namespace package.
 ]
-"src/bp_k_mean/_version.py" = [
-    "ALL",
-]
+"src/bp_k_mean/_version.py" = ["ALL"]
 
 [tool.pydoclint]
 style = 'numpy'

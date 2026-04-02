@@ -4,13 +4,19 @@ and initialization strategies.
 """
 
 import heapq
+from hmac import new
 import logging
 from enum import Enum
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from bp_k_means.k_means import kmeans, kmeans_plus_plus_init
+from bp_k_means.k_means import (
+    kmeans,
+    kmeans_plus_plus_init,
+    random_init,
+    subsampled_kmeans_plus_plus_init,
+)
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -38,8 +44,8 @@ class RankingStrategy(Enum):
 class InitStrategy(Enum):
     """Initialization strategies for centroid expansion.
 
-    LABEL_REINIT:        Re-initialize all centroids for the label via k-means++.
-    ADD_CENTROID_LABEL:   Keep existing centroids, add one new via k-means++.
+    LABEL_REINIT:        Re-initialize all centroids for the label.
+    ADD_CENTROID_LABEL:   Keep existing centroids, add one new.
     CLUSTER_REINIT:       Replace highest-WCSS cluster centroid with two new centroids.
     ADD_CENTROID_CLUSTER: Keep highest-WCSS cluster centroid, add one new within it.
     """
@@ -48,6 +54,20 @@ class InitStrategy(Enum):
     ADD_CENTROID_LABEL = 2
     CLUSTER_REINIT = 3
     ADD_CENTROID_CLUSTER = 4
+
+
+class InitAlgorithm(Enum):
+    """
+    Initialization algorithms used to initialize centroids.
+
+    KMEANS_PLUS_PLUS: Standard k-means++ initialization.
+    SUBSAMPLING_KMEANS_PLUS_PLUS: k-means++ initialization on a random subsample of the data.
+    RANDOM_SAMPLING: Randomly sample k points from the data as centroids.
+    """
+
+    KMEANS_PLUS_PLUS = 1
+    SUBSAMPLING_KMEANS_PLUS_PLUS = 2
+    RANDOM_SAMPLING = 3
 
 
 def _wcss_per_cluster(
@@ -102,49 +122,82 @@ def _build_init_centroids(
     rng: np.random.Generator,
     target_pts: "NDArray | None" = None,
     max_wcss_idx: "int | None" = None,
+    init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
+    subsample_size: int = 1000,
 ) -> "NDArray":
     """Build initial centroids for a k-means run with new_k clusters."""
     dim = pts.shape[1]
 
-    if strategy == InitStrategy.LABEL_REINIT:
-        if pts.shape[0] <= new_k:
-            return pts[:new_k]
-        return kmeans_plus_plus_init(pts, new_k, rng)
+    if strategy in (InitStrategy.LABEL_REINIT, InitStrategy.ADD_CENTROID_LABEL):
+        if pts.shape[0] < new_k:
+            msg = f"Cannot initialize {new_k} centroids with only {pts.shape[0]} points"
+            raise ValueError(msg)
 
-    if strategy == InitStrategy.ADD_CENTROID_LABEL:
-        if pts.shape[0] <= new_k:
-            return pts[:new_k]
-        return kmeans_plus_plus_init(pts, new_k, rng, existing_centroids=current_centroids)
+        if pts.shape[0] == new_k:
+            return pts.copy()
 
-    if strategy == InitStrategy.CLUSTER_REINIT:
-        if len(target_pts) < 2:
-            # Fallback: full re-init when the target cluster has too few points
-            return kmeans_plus_plus_init(pts, new_k, rng)
+        existing_centroids = (
+            current_centroids if strategy == InitStrategy.ADD_CENTROID_LABEL else None
+        )
+        return _call_init_algorithm(
+            init_algorithm, pts, new_k, rng, subsample_size, existing_centroids
+        )
+
+    if strategy in (InitStrategy.CLUSTER_REINIT, InitStrategy.ADD_CENTROID_CLUSTER):
+        assert target_pts is not None, (
+            "target_pts must be provided for cluster-level init strategies"
+        )
+        assert max_wcss_idx is not None, (
+            "max_wcss_idx must be provided for cluster-level init strategies"
+        )
+
+        new_k_cluster = new_k - curr_k + 1
+
+        if len(target_pts) < new_k_cluster:
+            msg = f"Not enough points in target cluster to initialize {new_k_cluster} centroids"
+            raise ValueError(msg)
+
         init_c = np.empty((new_k, dim), dtype=pts.dtype)
         init_c[:max_wcss_idx] = current_centroids[:max_wcss_idx]
-        init_c[max_wcss_idx : new_k - 2] = current_centroids[max_wcss_idx + 1 :]
-        if len(target_pts) == 2:
-            init_c[-2:] = target_pts
-        else:
-            init_c[-2:] = kmeans_plus_plus_init(target_pts, 2, rng)
-        return init_c
+        init_c[max_wcss_idx:-new_k_cluster] = current_centroids[max_wcss_idx + 1 :]
 
-    if strategy == InitStrategy.ADD_CENTROID_CLUSTER:
-        init_c = np.empty((new_k, dim), dtype=pts.dtype)
-        init_c[:curr_k] = current_centroids
-        if len(target_pts) <= 1:
-            init_c[curr_k] = target_pts[0]
-        else:
-            new_c = kmeans_plus_plus_init(
-                target_pts,
-                2,
-                rng,
-                existing_centroids=current_centroids[max_wcss_idx : max_wcss_idx + 1],
-            )
-            init_c[curr_k] = new_c[1]
+        if len(target_pts) == new_k_cluster:
+            init_c[-new_k_cluster:] = target_pts
+            return init_c
+
+        existing_centroids = (
+            current_centroids[max_wcss_idx : max_wcss_idx + 1]
+            if strategy == InitStrategy.ADD_CENTROID_CLUSTER
+            else None
+        )
+
+        init_c[-new_k_cluster:] = _call_init_algorithm(
+            init_algorithm, target_pts, new_k_cluster, rng, subsample_size, existing_centroids
+        )
+
         return init_c
 
     raise ValueError(f"Unsupported init strategy: {strategy}")
+
+
+def _call_init_algorithm(
+    init_algorithm: InitAlgorithm,
+    pts: "NDArray",
+    k: int,
+    rng: np.random.Generator,
+    subsample_size: int,
+    existing_centroids: "NDArray | None",
+) -> "NDArray":
+    """Dispatch to the appropriate centroid initialisation function."""
+    if init_algorithm == InitAlgorithm.KMEANS_PLUS_PLUS:
+        return kmeans_plus_plus_init(pts, k, rng, existing_centroids=existing_centroids)
+    if init_algorithm == InitAlgorithm.SUBSAMPLING_KMEANS_PLUS_PLUS:
+        return subsampled_kmeans_plus_plus_init(
+            pts, k, subsample_size, seed=rng, existing_centroids=existing_centroids
+        )
+    if init_algorithm == InitAlgorithm.RANDOM_SAMPLING:
+        return random_init(pts, k, rng, existing_centroids=existing_centroids)
+    raise ValueError(f"Unsupported init algorithm: {init_algorithm}")
 
 
 def _run_split(
@@ -158,6 +211,8 @@ def _run_split(
     n_init: int,
     rng: np.random.Generator,
     init_strategy: InitStrategy,
+    init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
+    subsample_size: int = 1000,
 ) -> "tuple[float, NDArray, NDArray]":
     """Run n_init k-means attempts with new_k clusters.
 
@@ -184,6 +239,8 @@ def _run_split(
             rng,
             target_pts,
             max_wcss_idx,
+            init_algorithm,
+            subsample_size,
         )
         lbls, ctrs = kmeans(pts, new_k, seed=rng, init_centroids=init_centroids, X2=X2)
         counts = np.bincount(lbls, minlength=new_k)
@@ -204,8 +261,10 @@ def bp_kmeans(
     seed=42,
     n_init=10,
     *,
-    ranking: RankingStrategy = RankingStrategy.EST_REDUCTION_LABEL,
-    init: InitStrategy = InitStrategy.CLUSTER_REINIT,
+    ranking_strategy: RankingStrategy = RankingStrategy.EST_REDUCTION_LABEL,
+    init_strategy: InitStrategy = InitStrategy.CLUSTER_REINIT,
+    init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
+    subsample_size: int = 1000,
 ):
     """
     BP-KMeans: greedy label-constrained clustering.
@@ -225,10 +284,15 @@ def bp_kmeans(
         Random seed.
     n_init : int
         Number of k-means restarts per split.
-    ranking : RankingStrategy
+    ranking_strategy : RankingStrategy
         Label selection strategy.
-    init : InitStrategy
+    init_strategy : InitStrategy
         Centroid expansion strategy.
+    init_algorithm : InitAlgorithm
+        Centroid initialisation algorithm (k-means++, subsampled k-means++, or random).
+    subsample_size : int
+        Number of points used when ``init_algorithm`` is
+        ``InitAlgorithm.SUBSAMPLING_KMEANS_PLUS_PLUS``.
 
     Returns
     -------
@@ -294,13 +358,13 @@ def bp_kmeans(
         class_labels[c] = np.zeros(pts.shape[0], dtype=int)
 
     # Dispatch to precomputed variant for exact-reduction ranking
-    if ranking == RankingStrategy.REDUCTION_LABEL:
+    if ranking_strategy == RankingStrategy.REDUCTION_LABEL:
         return _bp_kmeans_precomputed(
             classes,
             target_k,
             n_init,
             rng,
-            init,
+            init_strategy,
             points_per_class,
             idx_per_class,
             centroids_per_class,
@@ -311,13 +375,15 @@ def bp_kmeans(
             global_cluster_of_class,
             current_cluster_id,
             n_samples,
+            init_algorithm,
+            subsample_size,
         )
 
     # Build initial heap (max-heap via negation)
     heap: list[tuple[float, int]] = []
     for c in classes:
         score = _compute_rank(
-            ranking,
+            ranking_strategy,
             wcss_per_class[c],
             class_labels[c],
             X2_per_class[c],
@@ -351,7 +417,9 @@ def bp_kmeans(
             new_k,
             n_init,
             rng,
-            init,
+            init_strategy,
+            init_algorithm,
+            subsample_size,
         )
 
         class_labels[worst_class] = best_labels
@@ -359,7 +427,7 @@ def bp_kmeans(
         wcss_per_class[worst_class] = best_wcss
 
         score = _compute_rank(
-            ranking,
+            ranking_strategy,
             best_wcss,
             best_labels,
             X2,
@@ -397,6 +465,8 @@ def _bp_kmeans_precomputed(
     global_cluster_of_class,
     current_cluster_id,
     n_samples,
+    init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
+    subsample_size: int = 1000,
 ):
     """R_RL variant: precompute trial splits to rank by exact WCSS reduction."""
     pending_splits: dict[int, tuple[float, "NDArray", "NDArray"]] = {}
@@ -410,6 +480,8 @@ def _bp_kmeans_precomputed(
 
         if pts.shape[0] <= curr_k:
             return
+        if wcss_per_class[c] <= 0:
+            return
 
         best_wcss, best_labels, best_centroids = _run_split(
             pts,
@@ -422,9 +494,13 @@ def _bp_kmeans_precomputed(
             n_init,
             rng,
             init_strategy,
+            init_algorithm,
+            subsample_size,
         )
 
         reduction = wcss_per_class[c] - best_wcss
+        if reduction <= 0:
+            return
         heapq.heappush(heap, (-reduction, c))
         pending_splits[c] = (best_wcss, best_labels, best_centroids)
 

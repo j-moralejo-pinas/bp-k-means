@@ -22,8 +22,13 @@ by_size_bin.csv               – aggregate 4c
 overall_avg.png               – bar charts for 4a
 by_k_multiplier_wcss.png      – line chart for 4b (wcss)
 by_k_multiplier_time.png      – line chart for 4b (time)
+by_k_multiplier_scatter.png   – scatter (wcss vs time) per k_multiplier
+by_k_multiplier_pareto.png    – scatter with Pareto front per k_multiplier
 by_size_bin_wcss.png          – bar charts for 4c (wcss)
 by_size_bin_time.png          – bar charts for 4c (time)
+by_size_bin_scatter.png       – scatter (wcss vs time) per size bin
+by_size_bin_pareto.png        – scatter with Pareto front per size bin
+overall_pareto.png            – scatter with Pareto front (overall)
 """
 
 import colorsys
@@ -39,8 +44,18 @@ OUTPUT_DIR = Path("output")
 RESULTS_DIR = Path("output/analysis")
 DATA_DIR = Path("data/datasets")
 
-SIZE_BIN_EDGES = [0, 5_000, 20_000, 100_000, np.inf]
-SIZE_BIN_LABELS = ["<5k", "5k–20k", "20k–100k", ">100k"]
+SIZE_BIN_LABELS = [">10k nodes, >1k labels", ">10k nodes, ≤1k labels", "5k–10k nodes", "<5k nodes"]
+
+
+def assign_size_bin(n_instances: float, n_clusters: int) -> str:
+    if n_instances > 10_000 and n_clusters > 1_000:
+        return ">10k nodes, >1k labels"
+    if n_instances > 10_000:
+        return ">10k nodes, ≤1k labels"
+    if n_instances > 5_000:
+        return "5k–10k nodes"
+    return "<5k nodes"
+
 
 # Set to True to exclude HAC Ward runs from all analyses and plots
 EXCLUDE_HAC = True
@@ -75,7 +90,9 @@ def load_dataset_sizes() -> dict[str, int]:
     import pyarrow.parquet as pq
 
     sizes: dict[str, int] = {}
-    for path in DATA_DIR.glob("*.parquet"):
+    for path in DATA_DIR.glob("*nodes.parquet"):
+        if "com" in path.stem:
+            continue
         try:
             meta = pq.read_metadata(path)
             sizes[path.stem] = meta.num_rows
@@ -126,6 +143,87 @@ def pivot_for_line(df: pd.DataFrame, x_col: str, metric: str) -> pd.DataFrame:
     return df.pivot_table(index="label", columns=x_col, values=metric, aggfunc="mean")
 
 
+def compute_pareto_front(xs: list[float], ys: list[float]) -> list[bool]:
+    """Return boolean mask of Pareto-optimal points (minimise both x and y)."""
+    n = len(xs)
+    is_pareto = [True] * n
+    for i in range(n):
+        if not is_pareto[i]:
+            continue
+        for j in range(n):
+            if i == j or not is_pareto[j]:
+                continue
+            if xs[j] <= xs[i] and ys[j] <= ys[i] and (xs[j] < xs[i] or ys[j] < ys[i]):
+                is_pareto[i] = False
+                break
+    return is_pareto
+
+
+def _draw_pareto_ax(
+    ax,
+    sub: pd.DataFrame,
+    color_map: dict[str, tuple] | None,
+    x_col: str = "mean_relative_time",
+    y_col: str = "mean_relative_wcss",
+) -> None:
+    """Draw a scatter plot with Pareto-optimal points highlighted and the Pareto front line."""
+    xs = sub[x_col].tolist()
+    ys = sub[y_col].tolist()
+    pareto_mask = compute_pareto_front(xs, ys)
+
+    for i, (_, row) in enumerate(sub.iterrows()):
+        if not pareto_mask[i]:
+            continue
+        color = color_map.get(row["label"], "steelblue") if color_map else "steelblue"
+        ax.scatter(
+            row[x_col],
+            row[y_col],
+            color=color,
+            s=120,
+            zorder=4,
+            edgecolors="black",
+            linewidths=1.0,
+        )
+        ax.annotate(
+            row["label"],
+            xy=(row[x_col], row[y_col]),
+            xytext=(5, 3),
+            textcoords="offset points",
+            fontsize=7,
+            color=color,
+        )
+
+    # Draw Pareto front staircase (sorted by x ascending => y descending)
+    front_sorted = sorted(
+        [(xs[i], ys[i]) for i in range(len(xs)) if pareto_mask[i]],
+        key=lambda p: p[0],
+    )
+    if front_sorted:
+        x_start = min(xs) * 0.95
+        xs_plot: list[float] = [x_start, front_sorted[0][0]]
+        ys_plot: list[float] = [front_sorted[0][1], front_sorted[0][1]]
+        for k in range(1, len(front_sorted)):
+            fx, fy = front_sorted[k]
+            prev_y = front_sorted[k - 1][1]
+            xs_plot += [fx, fx]
+            ys_plot += [prev_y, fy]
+        ax.plot(
+            xs_plot,
+            ys_plot,
+            color="black",
+            linewidth=1.5,
+            linestyle="-",
+            zorder=5,
+            alpha=0.7,
+            label="Pareto front",
+        )
+
+    ax.axhline(1.0, color="crimson", linestyle="--", linewidth=1.0, alpha=0.6)
+    ax.axvline(1.0, color="crimson", linestyle="--", linewidth=1.0, alpha=0.6)
+    ax.set_xlabel("Mean Relative Time")
+    ax.set_ylabel("Mean Relative WCSS")
+
+
 # ---------------------------------------------------------------------------
 # Plots
 # ---------------------------------------------------------------------------
@@ -140,16 +238,17 @@ def _bar_chart(
     label_col: str = "label",
     reference_line: float = 1.0,
     color_map: dict[str, tuple] | None = None,
+    pareto_labels: set | None = None,
 ):
     sorted_df = df.sort_values(metric)
     n_bars = len(sorted_df)
-    colors = (
-        [color_map.get(lbl, "steelblue") for lbl in sorted_df[label_col]]
-        if color_map
-        else "steelblue"
-    )
+    orig_labels = sorted_df[label_col].tolist()
+    display_labels = [
+        "\u2605 " + lbl if (pareto_labels and lbl in pareto_labels) else lbl for lbl in orig_labels
+    ]
+    colors = [color_map.get(lbl, "steelblue") for lbl in orig_labels] if color_map else "steelblue"
     fig, ax = plt.subplots(figsize=(9, max(4, n_bars * 0.35)))
-    bars = ax.barh(sorted_df[label_col], sorted_df[metric], color=colors, edgecolor="white")
+    bars = ax.barh(display_labels, sorted_df[metric], color=colors, edgecolor="white")
     ax.bar_label(bars, fmt="%.3f", padding=3, fontsize=7)
     if reference_line is not None:
         ax.axvline(
@@ -164,6 +263,9 @@ def _bar_chart(
     ax.set_title(title)
     ax.xaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
     fig.tight_layout()
+    for tick in ax.yaxis.get_ticklabels():
+        if tick.get_text().startswith("\u2605"):
+            tick.set_fontweight("bold")
     fig.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
@@ -171,6 +273,14 @@ def _bar_chart(
 def plot_overall(overall: pd.DataFrame, color_map: dict[str, tuple] | None = None):
     overall = overall.copy()
     overall["label"] = overall.apply(alg_label, axis=1)
+
+    pareto_mask_overall = compute_pareto_front(
+        overall["mean_relative_time"].tolist(),
+        overall["mean_relative_wcss"].tolist(),
+    )
+    pareto_labels_overall: set[str] = {
+        row["label"] for i, (_, row) in enumerate(overall.iterrows()) if pareto_mask_overall[i]
+    }
 
     for metric, fname, title in [
         ("mean_relative_wcss", "overall_avg_wcss.png", "Mean Relative WCSS – overall"),
@@ -183,6 +293,7 @@ def plot_overall(overall: pd.DataFrame, color_map: dict[str, tuple] | None = Non
             xlabel=metric,
             save_path=RESULTS_DIR / fname,
             color_map=color_map,
+            pareto_labels=pareto_labels_overall,
         )
 
     # Combined figure
@@ -194,16 +305,24 @@ def plot_overall(overall: pd.DataFrame, color_map: dict[str, tuple] | None = Non
         (axes[0], overall_sorted_wcss, "mean_relative_wcss", "Mean Relative WCSS"),
         (axes[1], overall_sorted_time, "mean_relative_time", "Mean Relative Time"),
     ]:
+        orig_labels = sdf["label"].tolist()
+        display_labels = [
+            "\u2605 " + lbl if lbl in pareto_labels_overall else lbl for lbl in orig_labels
+        ]
         colors = (
-            [color_map.get(lbl, "steelblue") for lbl in sdf["label"]] if color_map else "steelblue"
+            [color_map.get(lbl, "steelblue") for lbl in orig_labels] if color_map else "steelblue"
         )
-        bars = ax.barh(sdf["label"], sdf[metric], color=colors, edgecolor="white")
+        bars = ax.barh(display_labels, sdf[metric], color=colors, edgecolor="white")
         ax.bar_label(bars, fmt="%.3f", padding=3, fontsize=7)
         ax.axvline(1.0, color="crimson", linestyle="--", linewidth=1.2, label="best=1.0")
         ax.set_xlabel(metric)
         ax.set_title(title + " (overall)")
         ax.legend(fontsize=8)
     fig.tight_layout()
+    for ax in axes:
+        for tick in ax.yaxis.get_ticklabels():
+            if tick.get_text().startswith("\u2605"):
+                tick.set_fontweight("bold")
     fig.savefig(RESULTS_DIR / "overall_avg.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
@@ -233,6 +352,17 @@ def plot_overall(overall: pd.DataFrame, color_map: dict[str, tuple] | None = Non
     ax.set_title("WCSS vs Time trade-off (overall)")
     fig.tight_layout()
     fig.savefig(RESULTS_DIR / "overall_scatter.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    # Scatter with Pareto front (overall)
+    fig, ax = plt.subplots(figsize=(10, 7))
+    _draw_pareto_ax(ax, overall, color_map)
+    ax.set_title("WCSS vs Time – Pareto front (overall)")
+    handles, labels_leg = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(handles, labels_leg, fontsize=8)
+    fig.tight_layout()
+    fig.savefig(RESULTS_DIR / "overall_pareto.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -268,9 +398,68 @@ def plot_by_k_multiplier(by_k_mult: pd.DataFrame, color_map: dict[str, tuple] | 
         fig.savefig(RESULTS_DIR / fname, dpi=150, bbox_inches="tight")
         plt.close(fig)
 
+    # Scatter: relative WCSS vs relative time, one subplot per k_multiplier
+    k_mults_all = sorted(by_k_mult["k_multiplier"].unique())
+    n_km = len(k_mults_all)
+    fig, axes = plt.subplots(1, n_km, figsize=(8 * n_km, 6))
+    if n_km == 1:
+        axes = [axes]
+    for ax, km in zip(axes, k_mults_all):
+        sub = by_k_mult[by_k_mult["k_multiplier"] == km].copy()
+        sub["label"] = sub.apply(alg_label, axis=1)
+        for _, row in sub.iterrows():
+            color = color_map.get(row["label"], "steelblue") if color_map else "steelblue"
+            ax.scatter(
+                row["mean_relative_time"], row["mean_relative_wcss"], color=color, s=80, zorder=3
+            )
+            ax.annotate(
+                row["label"],
+                xy=(row["mean_relative_time"], row["mean_relative_wcss"]),
+                xytext=(5, 3),
+                textcoords="offset points",
+                fontsize=7,
+                color=color,
+            )
+        ax.axhline(1.0, color="crimson", linestyle="--", linewidth=1.0, alpha=0.6)
+        ax.axvline(1.0, color="crimson", linestyle="--", linewidth=1.0, alpha=0.6)
+        ax.set_xlabel("Mean Relative Time")
+        ax.set_ylabel("Mean Relative WCSS")
+        ax.set_title(f"k_multiplier = {km}")
+    fig.suptitle("WCSS vs Time trade-off by k_multiplier", fontsize=13)
+    fig.tight_layout()
+    fig.savefig(RESULTS_DIR / "by_k_multiplier_scatter.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    # Scatter with Pareto front per k_multiplier
+    fig, axes = plt.subplots(1, n_km, figsize=(8 * n_km, 6))
+    if n_km == 1:
+        axes = [axes]
+    for ax, km in zip(axes, k_mults_all):
+        sub = by_k_mult[by_k_mult["k_multiplier"] == km].copy()
+        sub["label"] = sub.apply(alg_label, axis=1)
+        _draw_pareto_ax(ax, sub, color_map)
+        ax.set_title(f"k_multiplier = {km}")
+        handles, labels_leg = ax.get_legend_handles_labels()
+        if handles:
+            ax.legend(handles, labels_leg, fontsize=8)
+    fig.suptitle("WCSS vs Time – Pareto front by k_multiplier", fontsize=13)
+    fig.tight_layout()
+    fig.savefig(RESULTS_DIR / "by_k_multiplier_pareto.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
 
 def plot_by_size_bin(by_size: pd.DataFrame, color_map: dict[str, tuple] | None = None):
     size_bins = [b for b in SIZE_BIN_LABELS if b in by_size["size_bin"].values]
+
+    # Precompute Pareto front labels per size bin for bar chart highlighting
+    pareto_by_sb: dict[str, set[str]] = {}
+    for _sb in size_bins:
+        _sub = by_size[by_size["size_bin"] == _sb].copy()
+        _sub["label"] = _sub.apply(alg_label, axis=1)
+        _mask = compute_pareto_front(
+            _sub["mean_relative_time"].tolist(), _sub["mean_relative_wcss"].tolist()
+        )
+        pareto_by_sb[_sb] = {row["label"] for i, (_, row) in enumerate(_sub.iterrows()) if _mask[i]}
 
     for metric, fname, title in [
         ("mean_relative_wcss", "by_size_bin_wcss.png", "Mean Relative WCSS by dataset size"),
@@ -290,12 +479,17 @@ def plot_by_size_bin(by_size: pd.DataFrame, color_map: dict[str, tuple] | None =
             sub = by_size[by_size["size_bin"] == sb].copy()
             sub["label"] = sub.apply(alg_label, axis=1)
             sub = sub.sort_values(metric)
+            orig_labels = sub["label"].tolist()
+            pareto_set_sb = pareto_by_sb.get(sb, set())
+            display_labels = [
+                "\u2605 " + lbl if lbl in pareto_set_sb else lbl for lbl in orig_labels
+            ]
             colors = (
-                [color_map.get(lbl, "steelblue") for lbl in sub["label"]]
+                [color_map.get(lbl, "steelblue") for lbl in orig_labels]
                 if color_map
                 else "steelblue"
             )
-            bars = ax.barh(sub["label"], sub[metric], color=colors, edgecolor="white")
+            bars = ax.barh(display_labels, sub[metric], color=colors, edgecolor="white")
             ax.bar_label(bars, fmt="%.3f", padding=3, fontsize=7)
             ax.axvline(1.0, color="crimson", linestyle="--", linewidth=1.2)
             ax.set_title(f"size bin: {sb}")
@@ -303,6 +497,10 @@ def plot_by_size_bin(by_size: pd.DataFrame, color_map: dict[str, tuple] | None =
 
         fig.suptitle(title, fontsize=13)
         fig.tight_layout()
+        for ax in axes:
+            for tick in ax.yaxis.get_ticklabels():
+                if tick.get_text().startswith("\u2605"):
+                    tick.set_fontweight("bold")
         fig.savefig(RESULTS_DIR / fname, dpi=150, bbox_inches="tight")
         plt.close(fig)
 
@@ -334,6 +532,60 @@ def plot_by_size_bin(by_size: pd.DataFrame, color_map: dict[str, tuple] | None =
         line_fname = fname.replace(".png", "_line.png")
         fig2.savefig(RESULTS_DIR / line_fname, dpi=150, bbox_inches="tight")
         plt.close(fig2)
+
+    # Scatter: relative WCSS vs relative time, one subplot per size bin
+    n_sb = len(size_bins)
+    if n_sb > 0:
+        fig, axes = plt.subplots(1, n_sb, figsize=(8 * n_sb, 6))
+        if n_sb == 1:
+            axes = [axes]
+        for ax, sb in zip(axes, size_bins):
+            sub = by_size[by_size["size_bin"] == sb].copy()
+            sub["label"] = sub.apply(alg_label, axis=1)
+            for _, row in sub.iterrows():
+                color = color_map.get(row["label"], "steelblue") if color_map else "steelblue"
+                ax.scatter(
+                    row["mean_relative_time"],
+                    row["mean_relative_wcss"],
+                    color=color,
+                    s=80,
+                    zorder=3,
+                )
+                ax.annotate(
+                    row["label"],
+                    xy=(row["mean_relative_time"], row["mean_relative_wcss"]),
+                    xytext=(5, 3),
+                    textcoords="offset points",
+                    fontsize=7,
+                    color=color,
+                )
+            ax.axhline(1.0, color="crimson", linestyle="--", linewidth=1.0, alpha=0.6)
+            ax.axvline(1.0, color="crimson", linestyle="--", linewidth=1.0, alpha=0.6)
+            ax.set_xlabel("Mean Relative Time")
+            ax.set_ylabel("Mean Relative WCSS")
+            ax.set_title(f"size bin: {sb}")
+        fig.suptitle("WCSS vs Time trade-off by dataset size", fontsize=13)
+        fig.tight_layout()
+        fig.savefig(RESULTS_DIR / "by_size_bin_scatter.png", dpi=150, bbox_inches="tight")
+        plt.close(fig)
+
+    # Scatter with Pareto front per size bin
+    if n_sb > 0:
+        fig, axes = plt.subplots(1, n_sb, figsize=(8 * n_sb, 6))
+        if n_sb == 1:
+            axes = [axes]
+        for ax, sb in zip(axes, size_bins):
+            sub = by_size[by_size["size_bin"] == sb].copy()
+            sub["label"] = sub.apply(alg_label, axis=1)
+            _draw_pareto_ax(ax, sub, color_map)
+            ax.set_title(f"size bin: {sb}")
+            handles, labels_leg = ax.get_legend_handles_labels()
+            if handles:
+                ax.legend(handles, labels_leg, fontsize=8)
+        fig.suptitle("WCSS vs Time – Pareto front by dataset size", fontsize=13)
+        fig.tight_layout()
+        fig.savefig(RESULTS_DIR / "by_size_bin_pareto.png", dpi=150, bbox_inches="tight")
+        plt.close(fig)
 
 
 # ---------------------------------------------------------------------------
@@ -426,12 +678,7 @@ def main():
     print(f"  Saved by_k_multiplier.csv  ({len(by_k_mult)} rows)")
 
     # 4c. By dataset size bin
-    df["size_bin"] = pd.cut(
-        df["n_instances"],
-        bins=SIZE_BIN_EDGES,
-        labels=SIZE_BIN_LABELS,
-        right=True,
-    )
+    df["size_bin"] = [assign_size_bin(n, k) for n, k in zip(df["n_instances"], df["n_clusters"])]
     by_size = (
         df.groupby(alg_init + ["size_bin"], observed=True)
         .agg(

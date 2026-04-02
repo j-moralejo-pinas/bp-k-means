@@ -1,5 +1,18 @@
 {
     "version": "2.0.0",
     "tasks": [
+        {
+            "label": "Profile with py-spy",
+            "type": "shell",
+            "command": "direnv exec . py-spy record --output profile.pyspy --format raw --full-filenames -- python src/bp_k_means/main.py",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        }
     ]
 }

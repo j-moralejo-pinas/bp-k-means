@@ -10,6 +10,7 @@ import pandas as pd
 from bp_k_means.bisecting_k_means_optimized import (
     bisecting_kmeans_by_label_optimized_no_refine,
 )
+from bp_k_means.bp_kmeans import InitAlgorithm, InitStrategy, RankingStrategy, bp_kmeans
 from bp_k_means.cop_k_means import cop_kmeans_by_class
 from bp_k_means.hac import hac_ward_nnc_by_label
 from bp_k_means.main import overall_wcss
@@ -155,7 +156,8 @@ def run_cop_kmeans(X, y, k, seed, n_init, init_ensure_class):
 
 def run_benchmark():
     datasets_dir = Path("data/datasets")
-    dataset_files = list(datasets_dir.glob("*.parquet"))
+    dataset_files = list(datasets_dir.glob("*nodes.parquet"))
+    dataset_files = [f for f in dataset_files if "com" not in f.stem.lower()]
 
     # Exclude if madrid dataset is present
     # dataset_files = [f for f in dataset_files if "madrid" not in f.name.lower()]
@@ -164,18 +166,27 @@ def run_benchmark():
         logger.error(f"No parquet files found in {datasets_dir}")
         return
 
-    n_inits = [1, 2, 4, 8, 16, 32]
-    k_multipliers = [1.5, 2, 4, 8, 16, 32]
+    n_inits = [1, 2, 4, 8, 16]  # , 32]
+    k_multipliers = [1.5, 2, 4, 8, 16]  # , 32]
 
     algorithms = [
         *[
             (
-                f"BP-KMeans ({ranking.name}, {init.name})",
-                lambda X, y, k, seed, n_init, r=ranking, i=init: bp_kmeans(
-                    X, y, k, seed=seed, n_init=n_init, ranking=r, init=i
+                f"BP-KMeans ({ranking.name}, {init.name}, {init_algo.name})",
+                lambda X, y, k, seed, n_init, r=ranking, i=init, ia=init_algo: bp_kmeans(
+                    X,
+                    y,
+                    k,
+                    seed=seed,
+                    n_init=n_init,
+                    ranking_strategy=r,
+                    init_strategy=i,
+                    init_algorithm=ia,
+                    subsample_size=10,
                 ),
                 n_init,
             )
+            for init_algo in InitAlgorithm
             for ranking in RankingStrategy
             for init in InitStrategy
             for n_init in n_inits
@@ -204,11 +215,11 @@ def run_benchmark():
             )
             for n_init in n_inits
         ],
-        (
-            "HAC Ward (NNC)",
-            lambda X, y, k, seed, n_init: hac_ward_nnc_by_label(X, y, target_k=k),
-            1,
-        ),
+        # (
+        #     "HAC Ward (NNC)",
+        #     lambda X, y, k, seed, n_init: hac_ward_nnc_by_label(X, y, target_k=k),
+        #     1,
+        # ),
     ]
 
     for dataset_path in dataset_files:
