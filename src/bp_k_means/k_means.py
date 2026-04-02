@@ -161,4 +161,12 @@ def kmeans(X, k, max_iter=300, seed: int | np.random.Generator = 42, init_centro
                 # prevent reusing the same point again
                 point_cost[wi] = -np.inf
 
+            # Recompute centroids from updated labels so donor clusters
+            # are consistent; without this, a stale centroid can cause
+            # a false convergence on the next iteration.
+            centroids = np.zeros((k, d), dtype=X.dtype)
+            np.add.at(centroids, labels, X)
+            counts = np.bincount(labels, minlength=k)
+            centroids /= counts[:, None]
+
     return labels, centroids

@@ -480,8 +480,6 @@ def _bp_kmeans_precomputed(
 
         if pts.shape[0] <= curr_k:
             return
-        if wcss_per_class[c] <= 0:
-            return
 
         best_wcss, best_labels, best_centroids = _run_split(
             pts,
