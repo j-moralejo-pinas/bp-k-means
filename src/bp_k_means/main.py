@@ -52,8 +52,8 @@ def main():
             target_k,
             seed=42,
             n_init=n_init,
-            init_strategy=InitStrategy.ADD_CENTROID_CLUSTER,
-            ranking_strategy=RankingStrategy.EST_REDUCTION_CLUSTER,
+            init_strategy=InitStrategy.I_ACC,
+            ranking_strategy=RankingStrategy.R_ERC,
         )
     end_time = time.time()
 

@@ -153,20 +153,23 @@ def kmeans(X, k, max_iter=300, seed: int | np.random.Generator = 42, init_centro
             for ec in empty_clusters:
                 # pick the point that is currently worst represented
                 wi = np.argmax(point_cost)
+                donor = int(labels[wi])
 
                 # move that point to the empty cluster
                 labels[wi] = ec
                 centroids[ec] = X[wi]
-
-                # prevent reusing the same point again
+                counts[ec] = 1
+                counts[donor] -= 1
                 point_cost[wi] = -np.inf
 
-            # Recompute centroids from updated labels so donor clusters
-            # are consistent; without this, a stale centroid can cause
-            # a false convergence on the next iteration.
-            centroids = np.zeros((k, d), dtype=X.dtype)
-            np.add.at(centroids, labels, X)
-            counts = np.bincount(labels, minlength=k)
-            centroids /= counts[:, None]
+                # Update donor centroid incrementally and refresh costs for
+                # its remaining points so subsequent steals stay accurate.
+                if counts[donor] > 0:
+                    centroids[donor] = (centroids[donor] * (counts[donor] + 1) - X[wi]) / counts[
+                        donor
+                    ]
+                    donor_mask = labels == donor
+                    diff = X[donor_mask] - centroids[donor]
+                    point_cost[donor_mask] = np.einsum("ij,ij->i", diff, diff)
 
     return labels, centroids

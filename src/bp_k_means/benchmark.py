@@ -154,6 +154,65 @@ def run_cop_kmeans(X, y, k, seed, n_init, init_ensure_class):
     return best_labels
 
 
+K_MULTIPLIERS = [1.5, 2, 4]
+N_INITS = [1, 2, 4, 8, 16, 32]
+
+
+def _build_algorithms() -> list:
+    return [
+        *[
+            (
+                f"BP-KMeans ({ranking.name}, {init.name}, {init_algo.name})",
+                lambda X, y, k, seed, n_init=n_in, r=ranking, i=init, ia=init_algo: bp_kmeans(
+                    X,
+                    y,
+                    k,
+                    seed=seed,
+                    n_init=n_init,
+                    ranking_strategy=r,
+                    init_strategy=i,
+                    init_algorithm=ia,
+                    subsample_size=10,
+                ),
+                n_in,
+            )
+            for init_algo in [InitAlgorithm.KMEANS_PLUS_PLUS, InitAlgorithm.RANDOM_SAMPLING]
+            for ranking in RankingStrategy
+            for init in InitStrategy
+            for n_in in N_INITS
+        ],
+        *[
+            (
+                "Bisecting KMeans",
+                lambda X, y, k, seed, n_init=n_in: bisecting_kmeans_by_label_optimized_no_refine(
+                    X, y, k, seed=seed, n_init=n_init
+                ),
+                n_in,
+            )
+            for n_in in N_INITS
+        ],
+        *[
+            (
+                "Bisecting KMeans (R_RL)",
+                lambda X,
+                y,
+                k,
+                seed,
+                n_init=n_in: precomputed_bisecting_kmeans_by_label_optimized_no_refine(
+                    X, y, k, seed=seed, n_init=n_init
+                ),
+                n_in,
+            )
+            for n_in in N_INITS
+        ],
+        (
+            "HAC Ward (NNC)",
+            lambda X, y, k, seed: hac_ward_nnc_by_label(X, y, target_k=k),
+            1,
+        ),
+    ]
+
+
 def run_benchmark():
     datasets_dir = Path("data/datasets")
     dataset_files = list(datasets_dir.glob("*nodes.parquet"))
@@ -166,61 +225,7 @@ def run_benchmark():
         logger.error(f"No parquet files found in {datasets_dir}")
         return
 
-    n_inits = [1, 2, 4, 8, 16]  # , 32]
-    k_multipliers = [1.5, 2, 4, 8, 16]  # , 32]
-
-    algorithms = [
-        *[
-            (
-                f"BP-KMeans ({ranking.name}, {init.name}, {init_algo.name})",
-                lambda X, y, k, seed, n_init, r=ranking, i=init, ia=init_algo: bp_kmeans(
-                    X,
-                    y,
-                    k,
-                    seed=seed,
-                    n_init=n_init,
-                    ranking_strategy=r,
-                    init_strategy=i,
-                    init_algorithm=ia,
-                    subsample_size=10,
-                ),
-                n_init,
-            )
-            for init_algo in InitAlgorithm
-            for ranking in RankingStrategy
-            for init in InitStrategy
-            for n_init in n_inits
-        ],
-        *[
-            (
-                "Bisecting Optimized (No Refine)",
-                lambda X, y, k, seed, n_init: bisecting_kmeans_by_label_optimized_no_refine(
-                    X, y, k, seed=seed, n_init=n_init
-                ),
-                n_init,
-            )
-            for n_init in n_inits
-        ],
-        *[
-            (
-                "Precomputed Bisecting (No Refine)",
-                lambda X,
-                y,
-                k,
-                seed,
-                n_init: precomputed_bisecting_kmeans_by_label_optimized_no_refine(
-                    X, y, k, seed=seed, n_init=n_init
-                ),
-                n_init,
-            )
-            for n_init in n_inits
-        ],
-        # (
-        #     "HAC Ward (NNC)",
-        #     lambda X, y, k, seed, n_init: hac_ward_nnc_by_label(X, y, target_k=k),
-        #     1,
-        # ),
-    ]
+    algorithms = _build_algorithms()
 
     for dataset_path in dataset_files:
         logger.info(f"Loading dataset: {dataset_path.name}")
@@ -236,7 +241,7 @@ def run_benchmark():
 
         logger.info(f"  Instances: {n_instances}, Labels: {n_labels}")
 
-        for k_mult in k_multipliers:
+        for k_mult in K_MULTIPLIERS:
             target_k = int(n_labels * k_mult)
 
             if target_k > n_instances:
@@ -250,7 +255,7 @@ def run_benchmark():
 
                 start_time = time.time()
 
-                labels = alg_func(X, y, target_k, seed=42, n_init=n_init)
+                labels = alg_func(X, y, target_k, seed=42)
                 end_time = time.time()
                 duration = end_time - start_time
 
@@ -279,5 +284,165 @@ def run_benchmark():
                 )
 
 
+def _compute_distance_metrics(X: np.ndarray, labels: np.ndarray, y: np.ndarray) -> dict:
+    """Compute avg, max, and mean-max-per-label distance to cluster centroid."""
+    all_dists = np.empty(len(X))
+    max_per_label: dict = {}
+
+    for c in np.unique(labels):
+        mask = labels == c
+        pts = X[mask]
+        centroid = pts.mean(axis=0)
+        dists = np.linalg.norm(pts - centroid, axis=1)
+        all_dists[mask] = dists
+
+    # mean-max distance per original label
+    for lbl in np.unique(y):
+        lbl_mask = y == lbl
+        max_per_label[lbl] = float(all_dists[lbl_mask].max())
+
+    return {
+        "avg_dist_to_centroid_m": float(all_dists.mean()),
+        "max_dist_to_centroid_m": float(all_dists.max()),
+        "mean_max_dist_per_label_m": float(np.mean(list(max_per_label.values()))),
+    }
+
+
+def benchmark_com_madrid_avg_distance_to_centroid() -> None:
+    """Benchmark: average distance to centroid at k=10000 for all algorithms (Community of Madrid)."""
+    dataset_path = Path("data/datasets") / "com_madrid_osm_drive_nodes_split_split.parquet"
+    if not dataset_path.exists():
+        logger.error(f"Dataset not found: {dataset_path}")
+        return
+
+    logger.info(f"Loading {dataset_path.name}")
+    df = pd.read_parquet(dataset_path)
+    X = df[["x_utm", "y_utm"]].values
+    y = df["CUSEC"].values
+    target_k = 10000
+    logger.info(f"  Instances: {len(X)} | k={target_k}")
+
+    algorithms = _build_algorithms()
+
+    for alg_name, alg_func, n_init in algorithms:
+        logger.info(f"  Running {alg_name} | k={target_k} | n_init={n_init}")
+        start_time = time.time()
+        labels = alg_func(X, y, target_k, seed=42)
+        duration = time.time() - start_time
+
+        if labels is None:
+            logger.error(f"    {alg_name} failed to produce labels.")
+            continue
+
+        wcss = overall_wcss(X, labels)
+        _save_run_outputs(
+            dataset_name=dataset_path.stem,
+            alg_name=alg_name,
+            k=target_k,
+            k_mult=1.0,
+            n_init=n_init,
+            X=X,
+            y=y,
+            labels=labels,
+            duration=duration,
+            wcss=wcss,
+        )
+
+        dist_metrics = _compute_distance_metrics(X, labels, y)
+
+        safe_alg = re.sub(r"[^\w]", "_", alg_name).strip("_")
+        meta_path = (
+            OUTPUT_DIR
+            / dataset_path.stem
+            / safe_alg
+            / f"k{target_k}_ninit{n_init}"
+            / "metadata.json"
+        )
+        with open(meta_path) as f:
+            meta = json.load(f)
+        meta.update(dist_metrics)
+        with open(meta_path, "w") as f:
+            json.dump(meta, f, indent=2)
+
+        logger.info(
+            f"    -> avg dist: {dist_metrics['avg_dist_to_centroid_m']:.2f} m | "
+            f"max dist: {dist_metrics['max_dist_to_centroid_m']:.2f} m | "
+            f"mean-max/label: {dist_metrics['mean_max_dist_per_label_m']:.2f} m | "
+            f"clusters: {len(np.unique(labels))} | time: {duration:.4f}s"
+        )
+
+
+def benchmark_castile_leon_max_response_time() -> None:
+    """Benchmark: maximum response time at k=200 using province labels (Castile and León)."""
+    dataset_path = Path("data/datasets") / "castile_and_leon_osm_drive_nodes.parquet"
+    if not dataset_path.exists():
+        logger.error(f"Dataset not found: {dataset_path}")
+        return
+
+    logger.info(f"Loading {dataset_path.name}")
+    df = pd.read_parquet(dataset_path)
+    X = df[["x_utm", "y_utm"]].values
+    y = df["CPRO"].values  # province labels
+    target_k = 200
+    logger.info(f"  Instances: {len(X)} | unique provinces: {len(np.unique(y))} | k={target_k}")
+
+    if target_k > len(X):
+        logger.error(f"k={target_k} exceeds n_instances={len(X)}. Aborting.")
+        return
+
+    algorithms = _build_algorithms()
+
+    for alg_name, alg_func, n_init in algorithms:
+        # only benchmark n_init=8 for max response time
+        logger.info(f"  Running {alg_name} | k={target_k} | n_init={n_init}")
+        t0 = time.time()
+        labels = alg_func(X, y, target_k, seed=42)
+        duration = time.time() - t0
+
+        if labels is None:
+            logger.error(f"    {alg_name} failed to produce labels.")
+            continue
+
+        wcss = overall_wcss(X, labels)
+        _save_run_outputs(
+            dataset_name=dataset_path.stem,
+            alg_name=alg_name,
+            k=target_k,
+            k_mult=1.0,
+            n_init=n_init,
+            X=X,
+            y=y,
+            labels=labels,
+            duration=duration,
+            wcss=wcss,
+        )
+
+        dist_metrics = _compute_distance_metrics(X, labels, y)
+
+        safe_alg = re.sub(r"[^\w]", "_", alg_name).strip("_")
+        meta_path = (
+            OUTPUT_DIR
+            / dataset_path.stem
+            / safe_alg
+            / f"k{target_k}_ninit{n_init}"
+            / "metadata.json"
+        )
+        with open(meta_path) as f:
+            meta = json.load(f)
+        meta["response_time_s"] = duration
+        meta.update(dist_metrics)
+        with open(meta_path, "w") as f:
+            json.dump(meta, f, indent=2)
+
+        logger.info(
+            f"    -> time: {duration:.4f}s | "
+            f"avg dist: {dist_metrics['avg_dist_to_centroid_m']:.2f} m | "
+            f"max dist: {dist_metrics['max_dist_to_centroid_m']:.2f} m | "
+            f"mean-max/label: {dist_metrics['mean_max_dist_per_label_m']:.2f} m"
+        )
+
+
 if __name__ == "__main__":
-    run_benchmark()
+    # run_benchmark()
+    benchmark_castile_leon_max_response_time()
+    benchmark_com_madrid_avg_distance_to_centroid()

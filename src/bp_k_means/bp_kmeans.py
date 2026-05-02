@@ -34,26 +34,26 @@ class RankingStrategy(Enum):
     R_RL:  Exact WCSS reduction via precomputed trial split.
     """
 
-    WCSS_LABEL = 1
-    WCSS_CLUSTER = 2
-    EST_REDUCTION_LABEL = 3
-    EST_REDUCTION_CLUSTER = 4
-    REDUCTION_LABEL = 5
+    R_L = 1
+    R_C = 2
+    R_ERL = 3
+    R_ERC = 4
+    R_RL = 5
 
 
 class InitStrategy(Enum):
     """Initialization strategies for centroid expansion.
 
-    LABEL_REINIT:        Re-initialize all centroids for the label.
-    ADD_CENTROID_LABEL:   Keep existing centroids, add one new.
-    CLUSTER_REINIT:       Replace highest-WCSS cluster centroid with two new centroids.
-    ADD_CENTROID_CLUSTER: Keep highest-WCSS cluster centroid, add one new within it.
+    I_LRI: Re-initialize all centroids for the label.
+    I_ACL: Keep existing centroids, add one new.
+    I_CRI: Replace highest-WCSS cluster centroid with two new centroids.
+    I_ACC: Keep highest-WCSS cluster centroid, add one new within it.
     """
 
-    LABEL_REINIT = 1
-    ADD_CENTROID_LABEL = 2
-    CLUSTER_REINIT = 3
-    ADD_CENTROID_CLUSTER = 4
+    I_LRI = 1
+    I_ACL = 2
+    I_CRI = 3
+    I_ACC = 4
 
 
 class InitAlgorithm(Enum):
@@ -89,20 +89,20 @@ def _compute_rank(
     n_y: int,
 ) -> float:
     """Compute the ranking score for a label."""
-    if ranking == RankingStrategy.WCSS_LABEL:
+    if ranking == RankingStrategy.R_L:
         return wcss_total
 
-    if ranking == RankingStrategy.WCSS_CLUSTER:
+    if ranking == RankingStrategy.R_C:
         return float(np.max(_wcss_per_cluster(local_labels, X2, centroids, k_y)))
 
-    if ranking == RankingStrategy.EST_REDUCTION_LABEL:
+    if ranking == RankingStrategy.R_ERL:
         if k_y >= n_y:
             return 0.0
         if k_y == n_y - 1:
             return wcss_total
         return wcss_total * k_y / (k_y + 1)
 
-    if ranking == RankingStrategy.EST_REDUCTION_CLUSTER:
+    if ranking == RankingStrategy.R_ERC:
         if k_y >= n_y:
             return 0.0
         max_wcss = float(np.max(_wcss_per_cluster(local_labels, X2, centroids, k_y)))
@@ -128,7 +128,7 @@ def _build_init_centroids(
     """Build initial centroids for a k-means run with new_k clusters."""
     dim = pts.shape[1]
 
-    if strategy in (InitStrategy.LABEL_REINIT, InitStrategy.ADD_CENTROID_LABEL):
+    if strategy in (InitStrategy.I_LRI, InitStrategy.I_ACL):
         if pts.shape[0] < new_k:
             msg = f"Cannot initialize {new_k} centroids with only {pts.shape[0]} points"
             raise ValueError(msg)
@@ -136,14 +136,12 @@ def _build_init_centroids(
         if pts.shape[0] == new_k:
             return pts.copy()
 
-        existing_centroids = (
-            current_centroids if strategy == InitStrategy.ADD_CENTROID_LABEL else None
-        )
+        existing_centroids = current_centroids if strategy == InitStrategy.I_ACL else None
         return _call_init_algorithm(
             init_algorithm, pts, new_k, rng, subsample_size, existing_centroids
         )
 
-    if strategy in (InitStrategy.CLUSTER_REINIT, InitStrategy.ADD_CENTROID_CLUSTER):
+    if strategy in (InitStrategy.I_CRI, InitStrategy.I_ACC):
         assert target_pts is not None, (
             "target_pts must be provided for cluster-level init strategies"
         )
@@ -167,7 +165,7 @@ def _build_init_centroids(
 
         existing_centroids = (
             current_centroids[max_wcss_idx : max_wcss_idx + 1]
-            if strategy == InitStrategy.ADD_CENTROID_CLUSTER
+            if strategy == InitStrategy.I_ACC
             else None
         )
 
@@ -220,7 +218,7 @@ def _run_split(
     """
     target_pts = None
     max_wcss_idx = None
-    if init_strategy in (InitStrategy.CLUSTER_REINIT, InitStrategy.ADD_CENTROID_CLUSTER):
+    if init_strategy in (InitStrategy.I_CRI, InitStrategy.I_ACC):
         wcss_per = _wcss_per_cluster(local_labels, X2, current_centroids, curr_k)
         max_wcss_idx = int(np.argmax(wcss_per))
         target_pts = pts[local_labels == max_wcss_idx]
@@ -261,8 +259,8 @@ def bp_kmeans(
     seed=42,
     n_init=10,
     *,
-    ranking_strategy: RankingStrategy = RankingStrategy.EST_REDUCTION_LABEL,
-    init_strategy: InitStrategy = InitStrategy.CLUSTER_REINIT,
+    ranking_strategy: RankingStrategy = RankingStrategy.R_ERL,
+    init_strategy: InitStrategy = InitStrategy.I_CRI,
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
     subsample_size: int = 1000,
 ):
@@ -358,7 +356,7 @@ def bp_kmeans(
         class_labels[c] = np.zeros(pts.shape[0], dtype=int)
 
     # Dispatch to precomputed variant for exact-reduction ranking
-    if ranking_strategy == RankingStrategy.REDUCTION_LABEL:
+    if ranking_strategy == RankingStrategy.R_RL:
         return _bp_kmeans_precomputed(
             classes,
             target_k,
