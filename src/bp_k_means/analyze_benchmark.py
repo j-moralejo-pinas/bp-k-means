@@ -31,8 +31,11 @@ by_size_bin_time.png          – bar charts for 4c (time)
 by_size_bin_scatter.png       – scatter (wcss vs time) per size bin
 by_size_bin_pareto.png        – scatter with Pareto front per size bin
 overall_pareto.png            – scatter with Pareto front (overall)
+special/*/*_time_comparison.png
+                              – metric/time bars for Bisecting KMeans vs selected BP-KMeans
 """
 
+import argparse
 import colorsys
 import json
 import re
@@ -69,6 +72,17 @@ def assign_size_bin(n_instances: float, n_labels: int) -> str:
 
 # Set to True to exclude HAC Ward runs from all analyses and plots
 EXCLUDE_HAC = True
+SHOW_TITLES = False
+
+
+def _set_title(ax, title: str | None, *, force: bool = False) -> None:
+    if (SHOW_TITLES or force) and title:
+        ax.set_title(title)
+
+
+def _set_suptitle(fig, title: str | None, **kwargs) -> None:
+    if SHOW_TITLES and title:
+        fig.suptitle(title, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -370,13 +384,13 @@ def _add_scatter_legends(
         labels.append(text)
 
     if has_pareto_line:
-        _section("── System ──")
+        # _section("── System ──")
         handles.append(
             mlines.Line2D([], [], color="black", linewidth=1.5, linestyle="-", alpha=0.7)
         )
         labels.append("Pareto front")
 
-    if legend_info.get("baseline_color_entries"):
+    if len(legend_info.get("baseline_color_entries", [])) > 1:
         _section("── Baseline algorithms ──")
         for name, color in legend_info["baseline_color_entries"]:
             handles.append(
@@ -392,7 +406,7 @@ def _add_scatter_legends(
             )
             labels.append(to_math_label(name))
 
-    if legend_info.get("ranking_color_entries"):
+    if len(legend_info.get("ranking_color_entries", [])) > 1:
         _section("── Ranking method ──")
         for name, color in legend_info["ranking_color_entries"]:
             handles.append(
@@ -408,8 +422,8 @@ def _add_scatter_legends(
             )
             labels.append(to_math_label(name))
 
-    if legend_info.get("shape_entries"):
-        _section("── Reinit method ──")
+    if len(legend_info.get("shape_entries", [])) > 1:
+        _section("── Reinitialization Method ──")
         for name, mkr in legend_info["shape_entries"]:
             handles.append(
                 mlines.Line2D(
@@ -424,8 +438,8 @@ def _add_scatter_legends(
             )
             labels.append(to_math_label(name))
 
-    if legend_info.get("fill_entries"):
-        _section("── Init algo ──")
+    if len(legend_info.get("fill_entries", [])) > 1:
+        _section("── Initialization Algorithm ──")
         for name, filled in legend_info["fill_entries"]:
             handles.append(
                 mlines.Line2D(
@@ -441,8 +455,8 @@ def _add_scatter_legends(
             )
             labels.append(to_math_label(name))
 
-    if legend_info.get("n_init_lightness_entries"):
-        _section("── n_init (light→dark) ──")
+    if len(legend_info.get("n_init_lightness_entries", [])) > 1:
+        _section("── # Initializations (light→dark) ──")
         for n_init_val, gray in legend_info["n_init_lightness_entries"]:
             handles.append(
                 mlines.Line2D(
@@ -516,6 +530,7 @@ def _draw_scatter_ax(
     x_label: str = "Mean Relative Time",
     y_label: str = "Mean Relative WCSS",
     title: str | None = None,
+    force_title: bool = False,
     pareto: bool = False,
     floor_at_one: bool = True,
     add_reference_lines: bool = True,
@@ -595,8 +610,7 @@ def _draw_scatter_ax(
 
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
-    if title:
-        ax.set_title(title)
+    _set_title(ax, title, force=force_title)
 
     # Pareto zoom: lower bound at 1.0 when requested, upper bound near Pareto-front maxima.
     # Add a small top/right padding so frontier points are not clipped by the frame.
@@ -662,7 +676,7 @@ def _bar_chart(
         )
         ax.legend(fontsize=8)
     ax.set_xlabel(xlabel)
-    ax.set_title(title)
+    _set_title(ax, title)
     _apply_no_sci(ax.xaxis)
     fig.tight_layout()
     for tick in ax.yaxis.get_ticklabels():
@@ -717,7 +731,7 @@ def _save_with_log_variant(
         _apply_no_sci(ax.xaxis)
         _apply_no_sci(ax.yaxis)
         old_title = ax.get_title()
-        if old_title:
+        if SHOW_TITLES and old_title:
             if log_x_axis and log_y_axis:
                 suffix = " (log)"
             elif log_x_axis:
@@ -726,7 +740,7 @@ def _save_with_log_variant(
                 suffix = " (log y)"
             else:
                 suffix = ""
-            ax.set_title(old_title + suffix)
+            _set_title(ax, old_title + suffix)
     log_path = linear_path.parent / (linear_path.stem + "_log" + linear_path.suffix)
     fig.savefig(log_path, dpi=450, bbox_inches="tight")
     plt.close(fig)
@@ -792,7 +806,7 @@ def plot_overall(
         )
         ax.axvline(1.0, color="crimson", linestyle="--", linewidth=1.2, label="best=1.0")
         ax.set_xlabel(metric)
-        ax.set_title(title + " (overall)")
+        _set_title(ax, title + " (overall)", force=True)
         ax.legend(fontsize=8, loc="upper right")
         _apply_no_sci(ax.xaxis)
     fig.tight_layout()
@@ -890,12 +904,12 @@ def plot_by_k_multiplier(
                 fontsize=7,
             )
             ax.axvline(1.0, color="crimson", linestyle="--", linewidth=1.2, label="best=1.0")
-            ax.set_title(f"k_multiplier = {km}")
+            _set_title(ax, f"k_multiplier = {km}", force=True)
             ax.set_xlabel(metric)
             ax.legend(fontsize=8, loc="upper right")
             _apply_no_sci(ax.xaxis)
-        fig.suptitle(title, fontsize=13)
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
+        _set_suptitle(fig, title, fontsize=13)
+        fig.tight_layout(rect=[0, 0, 1, 0.95] if SHOW_TITLES else None)
         for ax in axes:
             for tick in ax.yaxis.get_ticklabels():
                 if tick.get_text().startswith("\u2605"):
@@ -926,7 +940,7 @@ def plot_by_k_multiplier(
         ax.axhline(1.0, color="crimson", linestyle="--", linewidth=1.2, label="best=1.0")
         ax.set_xlabel("k_multiplier")
         ax.set_ylabel(metric)
-        ax.set_title(title + " (line)")
+        _set_title(ax, title + " (line)")
         ax.set_xticks(k_mults)
         ax.legend(fontsize=7, loc="upper left", bbox_to_anchor=(1.01, 1), borderaxespad=0)
         fig.tight_layout()
@@ -946,11 +960,12 @@ def plot_by_k_multiplier(
             marker_map,
             fill_map,
             title=f"k_multiplier = {km}",
+            force_title=True,
         )
         if legend_info is not None:
             _add_scatter_legends(ax, legend_info, loc="upper right", bbox_to_anchor=(0.99, 0.99))
-    fig.suptitle("WCSS vs Time trade-off by k_multiplier", fontsize=13)
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    _set_suptitle(fig, "WCSS vs Time trade-off by k_multiplier", fontsize=13)
+    fig.tight_layout(rect=[0, 0, 1, 0.95] if SHOW_TITLES else None)
     _save_with_log_variant(fig, list(axes), save_dir / "by_k_multiplier_scatter.png")
 
     # Scatter with Pareto front per k_multiplier
@@ -964,6 +979,7 @@ def plot_by_k_multiplier(
             marker_map,
             fill_map,
             title=f"k_multiplier = {km}",
+            force_title=True,
             pareto=True,
         )
         if legend_info is not None:
@@ -974,8 +990,8 @@ def plot_by_k_multiplier(
                 loc="upper right",
                 bbox_to_anchor=(0.99, 0.99),
             )
-    fig.suptitle("WCSS vs Time – Pareto front by k_multiplier", fontsize=13)
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    _set_suptitle(fig, "WCSS vs Time – Pareto front by k_multiplier", fontsize=13)
+    fig.tight_layout(rect=[0, 0, 1, 0.95] if SHOW_TITLES else None)
     _save_with_log_variant(fig, list(axes), save_dir / "by_k_multiplier_pareto.png")
 
 
@@ -1037,13 +1053,13 @@ def plot_by_size_bin(
                 fontsize=7,
             )
             ax.axvline(1.0, color="crimson", linestyle="--", linewidth=1.2, label="best=1.0")
-            ax.set_title(f"size bin: {sb}")
+            _set_title(ax, f"Size Bin: {sb}", force=True)
             ax.set_xlabel(metric)
             ax.legend(fontsize=8, loc="upper right")
             _apply_no_sci(ax.xaxis)
 
-        fig.suptitle(title, fontsize=13)
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
+        _set_suptitle(fig, title, fontsize=13)
+        fig.tight_layout(rect=[0, 0, 1, 0.95] if SHOW_TITLES else None)
         for ax in axes:
             for tick in ax.yaxis.get_ticklabels():
                 if tick.get_text().startswith("\u2605"):
@@ -1075,7 +1091,7 @@ def plot_by_size_bin(
         ax2.axhline(1.0, color="crimson", linestyle="--", linewidth=1.2, label="best=1.0")
         ax2.set_xlabel("Dataset size bin")
         ax2.set_ylabel(metric)
-        ax2.set_title(title + " (line)")
+        _set_title(ax2, title + " (line)")
         ax2.legend(fontsize=7, loc="upper left", bbox_to_anchor=(1.01, 1), borderaxespad=0)
         fig2.tight_layout()
         line_fname = fname.replace(".png", "_line.png")
@@ -1095,13 +1111,14 @@ def plot_by_size_bin(
                 marker_map,
                 fill_map,
                 title=f"size bin: {sb}",
+                force_title=True,
             )
             if legend_info is not None:
                 _add_scatter_legends(
                     ax, legend_info, loc="upper right", bbox_to_anchor=(0.99, 0.99)
                 )
-        fig.suptitle("WCSS vs Time trade-off by dataset size", fontsize=13)
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
+        _set_suptitle(fig, "WCSS vs Time trade-off by dataset size", fontsize=13)
+        fig.tight_layout(rect=[0, 0, 1, 0.95] if SHOW_TITLES else None)
         _save_with_log_variant(fig, list(axes), save_dir / "by_size_bin_scatter.png")
 
     # Scatter with Pareto front per size bin
@@ -1116,6 +1133,7 @@ def plot_by_size_bin(
                 marker_map,
                 fill_map,
                 title=f"size bin: {sb}",
+                force_title=True,
                 pareto=True,
             )
             if legend_info is not None:
@@ -1126,8 +1144,8 @@ def plot_by_size_bin(
                     loc="upper right",
                     bbox_to_anchor=(0.99, 0.99),
                 )
-        fig.suptitle("WCSS vs Time – Pareto front by dataset size", fontsize=13)
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
+        _set_suptitle(fig, "WCSS vs Time – Pareto front by dataset size", fontsize=13)
+        fig.tight_layout(rect=[0, 0, 1, 0.95] if SHOW_TITLES else None)
         _save_with_log_variant(fig, list(axes), save_dir / "by_size_bin_pareto.png")
 
 
@@ -1248,13 +1266,21 @@ def analyze_grouping(
     )
     _marker_map = local_marker_map if marker_map is not None else None
     _fill_map = local_fill_map if fill_map is not None else None
+    _legend_info = (
+        build_legend_info(df, color_map, marker_map, fill_map)
+        if legend_info is not None
+        and color_map is not None
+        and marker_map is not None
+        and fill_map is not None
+        else legend_info
+    )
 
     plot_overall(
         overall,
         color_map=_color_map,
         marker_map=_marker_map,
         fill_map=_fill_map,
-        legend_info=legend_info,
+        legend_info=_legend_info,
         save_dir=save_dir,
     )
     plot_by_k_multiplier(
@@ -1262,7 +1288,7 @@ def analyze_grouping(
         color_map=_color_map,
         marker_map=_marker_map,
         fill_map=_fill_map,
-        legend_info=legend_info,
+        legend_info=_legend_info,
         save_dir=save_dir,
     )
     plot_by_size_bin(
@@ -1270,7 +1296,7 @@ def analyze_grouping(
         color_map=_color_map,
         marker_map=_marker_map,
         fill_map=_fill_map,
-        legend_info=legend_info,
+        legend_info=_legend_info,
         save_dir=save_dir,
     )
     print(f"  [{title_suffix}] plots saved to {save_dir}/")
@@ -1289,12 +1315,14 @@ SPECIAL_METRICS = [
 
 
 def _load_special_metric_metadata(dataset_prefix: str, metric_keys: list[str]) -> pd.DataFrame:
-    """Scan output/ for metadata.json files belonging to *dataset_prefix* that contain all *metric_keys*."""
+    """Scan output/ for special metric metadata rows containing all requested keys."""
     rows = []
     for meta_path in sorted(OUTPUT_DIR.rglob("metadata.json")):
         with open(meta_path) as f:
             meta = json.load(f)
         if not meta.get("dataset", "").startswith(dataset_prefix):
+            continue
+        if EXCLUDE_HAC and "HAC" in meta.get("algorithm", "").upper():
             continue
         if not all(k in meta for k in metric_keys):
             continue
@@ -1313,6 +1341,307 @@ def _load_special_metric_metadata(dataset_prefix: str, metric_keys: list[str]) -
     return pd.DataFrame(rows)
 
 
+def _resolve_special_n_inits(df: pd.DataFrame, requested_n_inits: list[int] | None) -> list[int]:
+    available = sorted(int(v) for v in df["n_init"].dropna().unique())
+    if not available:
+        return []
+    if requested_n_inits is None:
+        values = [1, available[-1]]
+    else:
+        values = requested_n_inits
+    resolved = sorted({int(v) for v in values if int(v) in available})
+    missing = sorted({int(v) for v in values if int(v) not in available})
+    if missing:
+        print(f"  Requested n_init values not found and skipped: {missing}")
+    return resolved
+
+
+def _time_comparison_number(value: float, _pos: int | None = None) -> str:
+    """Format comparison time values with precision based on their magnitude."""
+    if not np.isfinite(value):
+        return ""
+    abs_value = abs(value)
+    if abs_value < 10:
+        return f"{value:.2f}"
+    if abs_value < 100:
+        return f"{value:.1f}"
+    return f"{value:.0f}"
+
+
+def _metric_comparison_number(value: float, _pos: int | None = None) -> str:
+    """Format comparison metric values with precision based on their magnitude."""
+    if not np.isfinite(value):
+        return ""
+    abs_value = abs(value)
+    if abs_value < 1_000:
+        return f"{value:.2f}"
+    if abs_value < 10_000:
+        return f"{value:.1f}"
+    return f"{value:.0f}"
+
+
+def _special_metric_axis_step(separation: float) -> int:
+    if separation < 100:
+        return 25
+    if separation < 1_000:
+        return 250
+    return 2_500
+
+
+def _metric_axis_bounds(values: pd.Series) -> tuple[float, float] | None:
+    finite_values = values[np.isfinite(values)]
+    if finite_values.empty:
+        return None
+
+    min_value = finite_values.min()
+    max_value = finite_values.max()
+    step = _special_metric_axis_step(max_value - min_value)
+    low = np.floor(min_value / step) * step
+    high = np.ceil(max_value / step) * step
+    if low >= min_value:
+        low -= step
+    if high <= max_value:
+        high += step
+    if low == high:
+        high = low + step
+    return float(low), float(high)
+
+
+def _bp_algorithm_from_spec(spec: str) -> str:
+    spec = spec.strip()
+    if spec.startswith("BP-KMeans"):
+        return spec
+
+    parts = [part.strip() for part in re.split(r"[,/]", spec) if part.strip()]
+    if len(parts) != 3:
+        msg = (
+            "BP-KMeans combination must be either a full algorithm name or "
+            "label_selection,reinit_method,init_algo"
+        )
+        raise argparse.ArgumentTypeError(msg)
+    return f"BP-KMeans ({parts[0]}, {parts[1]}, {parts[2]})"
+
+
+def _best_bp_comparison_row(
+    bp_rows: pd.DataFrame,
+    key: str,
+) -> pd.Series:
+    bp_agg = (
+        bp_rows.groupby("algorithm")
+        .agg(**{f"mean_{key}": (key, "mean"), "mean_time": ("time", "mean")})
+        .reset_index()
+        .sort_values(f"mean_{key}")
+    )
+    return bp_agg.iloc[0]
+
+
+def _manual_bp_comparison_row(
+    bp_rows: pd.DataFrame,
+    n_init: int,
+    key: str,
+    manual_bp_algorithms: dict[int, str] | None,
+) -> pd.Series | None:
+    manual_algorithm = (manual_bp_algorithms or {}).get(n_init)
+    if manual_algorithm is None:
+        return None
+
+    manual_rows = bp_rows[bp_rows["algorithm"] == manual_algorithm]
+    if manual_rows.empty:
+        print(f"  n_init={n_init}: requested BP-KMeans combination not found: {manual_algorithm}")
+        return None
+
+    agg = manual_rows[[key, "time"]].mean()
+    return pd.Series(
+        {
+            "algorithm": manual_algorithm,
+            f"mean_{key}": agg[key],
+            "mean_time": agg["time"],
+        }
+    )
+
+
+def _plot_special_metric_time_comparison(
+    df: pd.DataFrame,
+    key: str,
+    metric_label: str,
+    save_dir: Path,
+    title_prefix: str,
+    *,
+    n_inits: list[int] | None = None,
+    manual_bp_algorithms: dict[int, str] | None = None,
+) -> None:
+    """Compare Bisecting KMeans with per-problem and globally tuned BP-KMeans rows."""
+
+    requested_n_inits = n_inits
+    if requested_n_inits is None and manual_bp_algorithms:
+        requested_n_inits = sorted(manual_bp_algorithms)
+    selected_n_inits = _resolve_special_n_inits(df, requested_n_inits)
+    if not selected_n_inits:
+        print(f"  [{title_prefix}] no selected n_init values for {key}. Skipping.")
+        return
+
+    rows = []
+    for n_init in selected_n_inits:
+        base_rows = df[(df["algorithm"] == "Bisecting KMeans") & (df["n_init"] == n_init)]
+        bp_rows = df[(df["algorithm"].str.startswith("BP-KMeans")) & (df["n_init"] == n_init)]
+        if base_rows.empty or bp_rows.empty:
+            print(
+                f"  [{title_prefix}] n_init={n_init}: missing "
+                "Bisecting KMeans or BP-KMeans data; skipped."
+            )
+            continue
+
+        base_agg = base_rows[[key, "time"]].mean()
+        rows.append(
+            {
+                "n_init": n_init,
+                "kind": "Bisecting K-Means",
+                "algorithm": "Bisecting KMeans",
+                f"mean_{key}": float(base_agg[key]),
+                "mean_time": float(base_agg["time"]),
+            }
+        )
+
+        best_bp = _best_bp_comparison_row(bp_rows, key)
+
+        rows.append(
+            {
+                "n_init": n_init,
+                "kind": "BP-KMeans - per-problem best",
+                "algorithm": best_bp["algorithm"],
+                f"mean_{key}": float(best_bp[f"mean_{key}"]),
+                "mean_time": float(best_bp["mean_time"]),
+            }
+        )
+
+        manual_bp = _manual_bp_comparison_row(
+            bp_rows,
+            n_init,
+            key,
+            manual_bp_algorithms,
+        )
+        if manual_bp is not None:
+            rows.append(
+                {
+                    "n_init": n_init,
+                    "kind": "BP-KMeans - globally tuned",
+                    "algorithm": manual_bp["algorithm"],
+                    f"mean_{key}": float(manual_bp[f"mean_{key}"]),
+                    "mean_time": float(manual_bp["mean_time"]),
+                }
+            )
+
+    comp = pd.DataFrame(rows)
+    if comp.empty:
+        print(f"  [{title_prefix}] no complete {key}/time comparison rows. Skipping.")
+        return
+
+    safe_key = key.replace("/", "_")
+    comp.to_csv(save_dir / f"{safe_key}_time_comparison.csv", index=False)
+
+    plotted_n_inits = sorted(int(v) for v in comp["n_init"].unique())
+    n_groups = len(plotted_n_inits)
+    x = np.arange(n_groups)
+    width = 0.11
+    kinds = [
+        "Bisecting K-Means",
+        "BP-KMeans - per-problem best",
+        "BP-KMeans - globally tuned",
+    ]
+    plotted_kinds = [kind for kind in kinds if kind in set(comp["kind"])]
+    colors = {
+        "Bisecting K-Means": "#4C78A8",
+        "BP-KMeans - per-problem best": "#F58518",
+        "BP-KMeans - globally tuned": "#54A24B",
+    }
+    metric_offsets = {
+        "Bisecting K-Means": -2.75 * width,
+        "BP-KMeans - per-problem best": -1.75 * width,
+        "BP-KMeans - globally tuned": -0.75 * width,
+    }
+    time_offsets = {
+        "Bisecting K-Means": 0.75 * width,
+        "BP-KMeans - per-problem best": 1.75 * width,
+        "BP-KMeans - globally tuned": 2.75 * width,
+    }
+
+    fig, ax_metric = plt.subplots(figsize=(max(8, n_groups * 2.6), 5.5))
+    ax_time = ax_metric.twinx()
+
+    for kind in plotted_kinds:
+        sub = comp[comp["kind"] == kind].set_index("n_init").reindex(plotted_n_inits)
+        metric_bars = ax_metric.bar(
+            x + metric_offsets[kind],
+            sub[f"mean_{key}"],
+            width,
+            label=f"{kind} metric",
+            color=colors[kind],
+            edgecolor="white",
+        )
+        time_bars = ax_time.bar(
+            x + time_offsets[kind],
+            sub["mean_time"],
+            width,
+            label=f"{kind} time",
+            color=colors[kind],
+            edgecolor="white",
+            hatch="//",
+            alpha=0.45,
+        )
+        ax_metric.bar_label(
+            metric_bars,
+            labels=[_metric_comparison_number(v) for v in sub[f"mean_{key}"]],
+            padding=2,
+            fontsize=7,
+            rotation=90,
+        )
+        ax_time.bar_label(
+            time_bars,
+            labels=[_time_comparison_number(v) for v in sub["mean_time"]],
+            padding=2,
+            fontsize=7,
+            rotation=90,
+        )
+
+    metric_bounds = _metric_axis_bounds(comp[f"mean_{key}"])
+    if metric_bounds is not None:
+        ax_metric.set_ylim(metric_bounds)
+    ax_time.set_yscale("log")
+    ax_metric.set_ylabel(metric_label)
+    ax_time.set_ylabel("Mean Time")
+    ax_metric.set_xlabel("Number of Initializations")
+    ax_metric.set_xticks(x)
+    ax_metric.set_xticklabels([str(v) for v in plotted_n_inits])
+    _set_title(ax_metric, f"{title_prefix} - {metric_label} and time comparison")
+    ax_metric.yaxis.set_major_formatter(mticker.FuncFormatter(_metric_comparison_number))
+    ax_time.yaxis.set_major_formatter(mticker.FuncFormatter(_time_comparison_number))
+    ax_time.yaxis.set_minor_formatter(mticker.NullFormatter())
+
+    legend_handles: list = []
+    legend_labels: list[str] = []
+    for kind in plotted_kinds:
+        legend_handles.append(mpatches.Patch(facecolor=colors[kind], edgecolor="white"))
+        legend_labels.append(kind)
+    legend_handles.extend(
+        [
+            mpatches.Patch(facecolor="white", edgecolor="black"),
+            mpatches.Patch(facecolor="white", edgecolor="black", hatch="//", alpha=0.45),
+        ]
+    )
+    legend_labels.extend([metric_label, "Time"])
+    ax_metric.legend(
+        legend_handles,
+        legend_labels,
+        fontsize=8,
+        loc="upper left",
+        bbox_to_anchor=(1.08, 1.0),
+    )
+    fig.tight_layout()
+    fig.savefig(save_dir / f"{safe_key}_time_comparison.png", dpi=450, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  [{title_prefix}] {safe_key}_time_comparison.csv + .png saved")
+
+
 def analyze_special_metric(
     dataset_prefix: str,
     metric_keys: list[tuple[str, str]],
@@ -1324,6 +1653,8 @@ def analyze_special_metric(
     marker_map: dict[str, str] | None = None,
     fill_map: dict[str, bool] | None = None,
     legend_info: dict | None = None,
+    comparison_n_inits: list[int] | None = None,
+    comparison_bp_algorithms: dict[int, str] | None = None,
 ) -> None:
     """Analyze special metrics in absolute terms per algorithm × n_init.
 
@@ -1350,6 +1681,14 @@ def analyze_special_metric(
 
     save_dir.mkdir(parents=True, exist_ok=True)
     df["label"] = df.apply(alg_label, axis=1)
+    local_legend_info = (
+        build_legend_info(df, color_map, marker_map, fill_map)
+        if legend_info is not None
+        and color_map is not None
+        and marker_map is not None
+        and fill_map is not None
+        else legend_info
+    )
 
     agg_dict = {"mean_time": ("time", "mean")}
     for key in keys:
@@ -1386,7 +1725,7 @@ def analyze_special_metric(
             fontsize=7,
         )
         ax.set_xlabel(metric_label)
-        ax.set_title(f"{title_prefix} – {metric_label}")
+        _set_title(ax, f"{title_prefix} – {metric_label}")
         _apply_no_sci(ax.xaxis)
         fig.tight_layout()
         safe_key = key.replace("/", "_")
@@ -1409,8 +1748,8 @@ def analyze_special_metric(
             pareto=False,
             add_reference_lines=False,
         )
-        if legend_info is not None:
-            _add_scatter_legends(ax, legend_info)
+        if local_legend_info is not None:
+            _add_scatter_legends(ax, local_legend_info)
         fig.tight_layout()
         _save_with_log_variant(
             fig,
@@ -1437,8 +1776,8 @@ def analyze_special_metric(
             floor_at_one=False,
             add_reference_lines=False,
         )
-        if legend_info is not None:
-            _add_scatter_legends(ax, legend_info, has_pareto_line=True)
+        if local_legend_info is not None:
+            _add_scatter_legends(ax, local_legend_info, has_pareto_line=True)
         fig.tight_layout()
         _save_with_log_variant(
             fig,
@@ -1448,7 +1787,84 @@ def analyze_special_metric(
             log_y_axis=False,
         )
 
-        print(f"  [{title_prefix}] {safe_key}: bar + scatter + pareto saved")
+        _plot_special_metric_time_comparison(
+            df,
+            key,
+            metric_label,
+            save_dir,
+            title_prefix,
+            n_inits=comparison_n_inits,
+            manual_bp_algorithms=comparison_bp_algorithms,
+        )
+
+        print(f"  [{title_prefix}] {safe_key}: bar + scatter + pareto + comparison saved")
+
+
+def parse_n_init_list(value: str) -> list[int]:
+    """Parse a comma-separated n_init list for CLI use."""
+    try:
+        n_inits = [int(part.strip()) for part in value.split(",") if part.strip()]
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("n_init values must be integers") from exc
+    if not n_inits:
+        raise argparse.ArgumentTypeError("provide at least one n_init value")
+    if any(n < 1 for n in n_inits):
+        raise argparse.ArgumentTypeError("n_init values must be >= 1")
+    return n_inits
+
+
+def parse_bp_combination_map(value: str) -> dict[int, str]:
+    """Parse n_init-to-BP-KMeans-combination mapping for CLI use."""
+    mapping: dict[int, str] = {}
+    for raw_entry in value.split(";"):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        if "=" not in entry:
+            raise argparse.ArgumentTypeError("BP combinations must use n_init=combination entries")
+        raw_n_init, raw_spec = entry.split("=", 1)
+        try:
+            n_init = int(raw_n_init.strip())
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError("BP combination n_init keys must be integers") from exc
+        if n_init < 1:
+            raise argparse.ArgumentTypeError("BP combination n_init keys must be >= 1")
+        mapping[n_init] = _bp_algorithm_from_spec(raw_spec)
+
+    if not mapping:
+        raise argparse.ArgumentTypeError("provide at least one BP combination entry")
+    return mapping
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Analyze benchmark results.")
+    parser.add_argument(
+        "--special-n-inits",
+        type=parse_n_init_list,
+        default="1,32",
+        help=(
+            "Comma-separated n_init values for the special metric/time comparison "
+            "plot. Defaults to 1 and the maximum available n_init."
+        ),
+    )
+    parser.add_argument(
+        "--special-bp-combinations",
+        type=parse_bp_combination_map,
+        default="1=R_C,I_CRI,KMEANS_PLUS_PLUS;32=R_RL,I_ACL,KMEANS_PLUS_PLUS",
+        help=(
+            "Semicolon-separated manual BP-KMeans combination per n_init, e.g. "
+            "'1=R_L,I_LRI,KMEANS_PLUS_PLUS;32=R_C,I_ACC,KMEANS_PLUS_PLUS'. "
+            "These combinations are plotted as BP-KMeans - globally tuned. "
+            "The per-problem best BP-KMeans combination is always chosen separately "
+            "for each special metric and n_init."
+        ),
+    )
+    parser.add_argument(
+        "--show-titles",
+        action="store_true",
+        help="Show plot titles. Titles are hidden by default.",
+    )
+    return parser.parse_args()
 
 
 # ---------------------------------------------------------------------------
@@ -1456,7 +1872,14 @@ def analyze_special_metric(
 # ---------------------------------------------------------------------------
 
 
-def main():
+def main(
+    special_n_inits: list[int] | None = None,
+    special_bp_combinations: dict[int, str] | None = None,
+    show_titles: bool = False,
+):
+    global SHOW_TITLES
+    SHOW_TITLES = show_titles
+
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     # 1. Load raw data
@@ -1676,6 +2099,8 @@ def main():
         marker_map=marker_map,
         fill_map=fill_map,
         legend_info=legend_info,
+        comparison_n_inits=special_n_inits,
+        comparison_bp_algorithms=special_bp_combinations,
     )
     analyze_special_metric(
         dataset_prefix="com_madrid_osm_drive_nodes_split_split",
@@ -1687,6 +2112,8 @@ def main():
         marker_map=marker_map,
         fill_map=fill_map,
         legend_info=legend_info,
+        comparison_n_inits=special_n_inits,
+        comparison_bp_algorithms=special_bp_combinations,
     )
     analyze_special_metric(
         dataset_prefix="castile_and_leon_osm_drive_nodes",
@@ -1697,6 +2124,8 @@ def main():
         marker_map=marker_map,
         fill_map=fill_map,
         legend_info=legend_info,
+        comparison_n_inits=special_n_inits,
+        comparison_bp_algorithms=special_bp_combinations,
     )
     analyze_special_metric(
         dataset_prefix="castile_and_leon_osm_drive_nodes",
@@ -1708,8 +2137,15 @@ def main():
         marker_map=marker_map,
         fill_map=fill_map,
         legend_info=legend_info,
+        comparison_n_inits=special_n_inits,
+        comparison_bp_algorithms=special_bp_combinations,
     )
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(
+        special_n_inits=args.special_n_inits,
+        special_bp_combinations=args.special_bp_combinations,
+        show_titles=args.show_titles,
+    )
