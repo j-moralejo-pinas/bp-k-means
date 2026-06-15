@@ -51,6 +51,7 @@ import pandas as pd
 OUTPUT_DIR = Path("output")
 RESULTS_DIR = Path("output/analysis")
 DATA_DIR = Path("data/datasets")
+HAC_STRENGTH_BENCHMARK_TYPE = "hac_strength"
 
 SIZE_BIN_LABELS = [
     ">1k labels",
@@ -95,6 +96,8 @@ def load_all_metadata() -> pd.DataFrame:
     for meta_path in sorted(OUTPUT_DIR.rglob("metadata.json")):
         with open(meta_path) as f:
             meta = json.load(f)
+        if meta.get("benchmark_type") == HAC_STRENGTH_BENCHMARK_TYPE:
+            continue
         rows.append(
             {
                 "dataset": meta["dataset"],
@@ -103,8 +106,38 @@ def load_all_metadata() -> pd.DataFrame:
                 "k_multiplier": float(meta["k_multiplier"]),
                 "k": int(meta["k"]),
                 "n_clusters": int(meta["n_clusters"]),
+                "n_labels": int(meta["n_labels"]) if "n_labels" in meta else np.nan,
                 "wcss": float(meta["wcss_total"]),
                 "time": float(meta["duration_seconds"]),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def load_hac_strength_metadata() -> pd.DataFrame:
+    """Load only metadata rows produced by the HAC-strength benchmark."""
+    rows = []
+    for meta_path in sorted(OUTPUT_DIR.rglob("metadata.json")):
+        with open(meta_path) as f:
+            meta = json.load(f)
+        if meta.get("benchmark_type") != HAC_STRENGTH_BENCHMARK_TYPE:
+            continue
+        rows.append(
+            {
+                "dataset": meta["dataset"],
+                "algorithm": meta["algorithm"],
+                "n_init": int(meta["n_init"]),
+                "k_multiplier": float(meta["k_multiplier"]),
+                "k": int(meta["k"]),
+                "n_clusters": int(meta["n_clusters"]),
+                "n_labels": int(meta["n_labels"]) if "n_labels" in meta else np.nan,
+                "wcss": float(meta["wcss_total"]),
+                "time": float(meta["duration_seconds"]),
+                "requested_cluster_multiplier": float(
+                    meta.get("requested_cluster_multiplier", meta["k_multiplier"])
+                ),
+                "requested_n_clusters": int(meta.get("requested_n_clusters", meta["k"])),
+                "target_k_was_capped": bool(meta.get("target_k_was_capped", False)),
             }
         )
     return pd.DataFrame(rows)
@@ -1320,6 +1353,8 @@ def _load_special_metric_metadata(dataset_prefix: str, metric_keys: list[str]) -
     for meta_path in sorted(OUTPUT_DIR.rglob("metadata.json")):
         with open(meta_path) as f:
             meta = json.load(f)
+        if meta.get("benchmark_type") == HAC_STRENGTH_BENCHMARK_TYPE:
+            continue
         if not meta.get("dataset", "").startswith(dataset_prefix):
             continue
         if EXCLUDE_HAC and "HAC" in meta.get("algorithm", "").upper():
@@ -1800,6 +1835,92 @@ def analyze_special_metric(
         print(f"  [{title_prefix}] {safe_key}: bar + scatter + pareto + comparison saved")
 
 
+def analyze_hac_strength_benchmark(show_titles: bool = False) -> None:
+    """Run the regular relative analysis using only HAC-strength benchmark rows."""
+    global SHOW_TITLES
+    SHOW_TITLES = show_titles
+
+    df = load_hac_strength_metadata()
+    if df.empty:
+        print("  No HAC-strength benchmark metadata found. Skipping.")
+        return
+
+    save_dir = RESULTS_DIR / "hac_strength"
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    sizes = load_dataset_sizes()
+    df["n_instances"] = df["dataset"].map(sizes)
+    missing = df["n_instances"].isna().sum()
+    if missing:
+        print(
+            f"  WARNING: {missing} HAC-strength rows could not be matched "
+            "to a dataset parquet file."
+        )
+
+    df["n_labels"] = df["n_labels"].fillna(df["n_clusters"] / df["k_multiplier"])
+    df["size_bin"] = [
+        assign_size_bin(n, int(k)) for n, k in zip(df["n_instances"], df["n_labels"])
+    ]
+
+    best = (
+        df.groupby(["dataset", "k_multiplier"])
+        .agg(best_wcss=("wcss", "min"), best_time=("time", "min"))
+        .reset_index()
+    )
+    rel = df.merge(best, on=["dataset", "k_multiplier"])
+    rel["relative_wcss"] = rel["wcss"] / rel["best_wcss"]
+    rel["relative_time"] = rel["time"] / rel["best_time"]
+
+    rel_cols = [
+        "dataset",
+        "n_instances",
+        "algorithm",
+        "n_init",
+        "k_multiplier",
+        "requested_cluster_multiplier",
+        "requested_n_clusters",
+        "target_k_was_capped",
+        "k",
+        "n_clusters",
+        "wcss",
+        "time",
+        "best_wcss",
+        "best_time",
+        "relative_wcss",
+        "relative_time",
+    ]
+    rel[rel_cols].sort_values(["dataset", "algorithm", "n_init"]).to_csv(
+        save_dir / "relative_metrics.csv", index=False
+    )
+    print(f"  [hac_strength] relative_metrics.csv  ({len(rel)} rows)")
+
+    min_lightness = 0.25
+    max_lightness = 0.8
+    color_map = build_color_map(rel, min_lightness=min_lightness, max_lightness=max_lightness)
+    marker_map = build_marker_map(rel)
+    fill_map = build_fill_map(rel)
+    legend_info = build_legend_info(
+        rel,
+        color_map,
+        marker_map,
+        fill_map,
+        min_lightness=min_lightness,
+        max_lightness=max_lightness,
+    )
+
+    analyze_grouping(
+        rel,
+        group_cols=["algorithm", "n_init"],
+        label_fn=alg_label,
+        save_dir=save_dir,
+        title_suffix="hac_strength",
+        color_map=color_map,
+        marker_map=marker_map,
+        fill_map=fill_map,
+        legend_info=legend_info,
+    )
+
+
 def parse_n_init_list(value: str) -> list[int]:
     """Parse a comma-separated n_init list for CLI use."""
     try:
@@ -1938,7 +2059,7 @@ def main(
 
     alg_init = ["algorithm", "n_init"]
 
-    df["n_labels"] = df["n_clusters"] / df["k_multiplier"]
+    df["n_labels"] = df["n_labels"].fillna(df["n_clusters"] / df["k_multiplier"])
     df["size_bin"] = [assign_size_bin(n, k) for n, k in zip(df["n_instances"], df["n_labels"])]
 
     # 4. Plots + CSVs (overall, by_k_multiplier, by_size_bin)
@@ -2140,6 +2261,12 @@ def main(
         comparison_n_inits=special_n_inits,
         comparison_bp_algorithms=special_bp_combinations,
     )
+
+    # -----------------------------------------------------------------------
+    # 9. HAC-strength benchmark analysis: opt in to only the isolated outputs
+    # -----------------------------------------------------------------------
+    print("\nGenerating HAC-strength benchmark analysis…")
+    analyze_hac_strength_benchmark(show_titles=show_titles)
 
 
 if __name__ == "__main__":
