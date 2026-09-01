@@ -1,5 +1,5 @@
 """
-bp_k_mean
+bp_k_means
 """
 
 try:
