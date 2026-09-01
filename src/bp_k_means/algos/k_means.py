@@ -1,7 +1,19 @@
+"""Core k-means initialization and clustering routines."""
+
 import numpy as np
+from numpy.typing import ArrayLike, NDArray
 
+from bp_k_means.algos.base_algo import BaseAlgo
 
-def kmeans_plus_plus_init(X, k, seed: int | np.random.Generator = 42, existing_centroids=None):
+Array = NDArray
+
+def kmeans_plus_plus_init(
+    X: Array,
+    k: int,
+    seed: int | np.random.Generator = 42,
+    existing_centroids: Array | None = None,
+) -> Array:
+    """Initialize centroids with the k-means++ strategy."""
     rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
     n, d = X.shape
     centroids = np.empty((k, d))
@@ -51,13 +63,18 @@ def kmeans_plus_plus_init(X, k, seed: int | np.random.Generator = 42, existing_c
 
 
 def subsampled_kmeans_plus_plus_init(
-    X, k, subsample_size, seed: int | np.random.Generator = 42, existing_centroids=None
-):
-    """K-means++ initialisation on a random subsample of X.
+    X: Array,
+    k: int,
+    subsample_size: int,
+    seed: int | np.random.Generator = 42,
+    existing_centroids: Array | None = None,
+) -> Array:
+    """
+    K-means++ initialisation on a random subsample of X.
 
-    Selects `subsample_size` points uniformly without replacement, then runs
-    standard k-means++ on that subset.  All centroids are drawn from the
-    subsample, keeping complexity O(k * subsample_size) instead of O(k * n).
+    Selects `subsample_size` points uniformly without replacement, then runs standard k-means++ on
+    that subset.  All centroids are drawn from the subsample, keeping complexity O(k *
+    subsample_size) instead of O(k * n).
     """
     rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
     n = X.shape[0]
@@ -69,11 +86,17 @@ def subsampled_kmeans_plus_plus_init(
     return kmeans_plus_plus_init(X_sub, k, seed=rng, existing_centroids=existing_centroids)
 
 
-def random_init(X, k, seed: int | np.random.Generator = 42, existing_centroids=None):
-    """Random initialisation: pick k distinct points uniformly at random.
+def random_init(
+    X: Array,
+    k: int,
+    seed: int | np.random.Generator = 42,
+    existing_centroids: Array | None = None,
+) -> Array:
+    """
+    Random initialisation: pick k distinct points uniformly at random.
 
-    If `existing_centroids` is provided, only the remaining slots are filled
-    with new random points, and no new centroid will duplicate an existing one.
+    If `existing_centroids` is provided, only the remaining slots are filled with new random points,
+    and no new centroid will duplicate an existing one.
     """
     rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
     n, d = X.shape
@@ -104,7 +127,15 @@ def random_init(X, k, seed: int | np.random.Generator = 42, existing_centroids=N
     return centroids
 
 
-def kmeans(X, k, max_iter=300, seed: int | np.random.Generator = 42, init_centroids=None, X2=None):
+def kmeans(
+    X: Array,
+    k: int,
+    max_iter: int = 300,
+    seed: int | np.random.Generator = 42,
+    init_centroids: Array | None = None,
+    X2: Array | None = None,
+) -> tuple[Array, Array]:
+    """Run Lloyd's k-means algorithm and return labels and centroids."""
     rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
     n, d = X.shape
 
@@ -120,6 +151,7 @@ def kmeans(X, k, max_iter=300, seed: int | np.random.Generator = 42, init_centro
 
     if X2 is None:
         X2 = np.einsum("ij,ij->i", X, X)
+    assert X2 is not None
 
     for _ in range(max_iter):
         dist = (
@@ -173,3 +205,72 @@ def kmeans(X, k, max_iter=300, seed: int | np.random.Generator = 42, init_centro
                     point_cost[donor_mask] = np.einsum("ij,ij->i", diff, diff)
 
     return labels, centroids
+
+
+class KMeans(BaseAlgo):
+    """Common-interface wrapper around Lloyd's k-means algorithm."""
+
+    def __init__(
+        self,
+        max_iter: int = 300,
+        seed: int | np.random.Generator = 42,
+        n_init: int = 1,
+    ) -> None:
+        """Initialize a k-means algorithm.
+
+        Parameters
+        ----------
+        max_iter : int
+            Maximum number of Lloyd iterations per initialization.
+        seed : int | np.random.Generator
+            Seed or random generator used for initialization.
+        n_init : int
+            Number of independent initializations.
+        """
+        super().__init__(seed=seed, n_init=n_init)
+        self.max_iter = max_iter
+
+    def fit(
+        self,
+        X: ArrayLike,
+        y: ArrayLike | None,  # noqa: ARG002 - accepted for interface compatibility
+        target_k: int,
+    ) -> "KMeans":
+        """Fit k-means and store the best labels and centroids.
+
+        Parameters
+        ----------
+        X : ArrayLike
+            Feature matrix.
+        y : ArrayLike | None
+            Ignored class labels, accepted for interface compatibility.
+        target_k : int
+            Requested number of clusters.
+
+        Returns
+        -------
+        KMeans
+            The fitted algorithm instance.
+        """
+        X_array = np.asarray(X)
+        rng = np.random.default_rng(self.seed) if isinstance(self.seed, int) else self.seed
+        best_wcss = float("inf")
+        best_labels = None
+        best_centroids = None
+
+        for _ in range(self.n_init):
+            labels, centroids = kmeans(
+                X_array,
+                target_k,
+                max_iter=self.max_iter,
+                seed=rng,
+            )
+            wcss = float(np.sum((X_array - centroids[labels]) ** 2))
+            if wcss < best_wcss:
+                best_wcss = wcss
+                best_labels = labels
+                best_centroids = centroids
+
+        assert best_labels is not None
+        assert best_centroids is not None
+        return self._set_result(best_labels, best_centroids)

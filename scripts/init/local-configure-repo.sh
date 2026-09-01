@@ -1,7 +1,7 @@
 #!/bin/bash
 # Local script to configure repository (mirrors GitHub Actions workflow)
 # Usage: local-configure-repo.sh <python_version> [python_version_max] [repo_topics] [workflow]
-# 
+#
 # Prerequisites:
 #   - gh CLI is installed and authenticated
 #   - You are in the git project root directory

@@ -87,6 +87,7 @@ ignore = [
     "PLR0915", # Too many statements
     "ANN401",  # Dynamically typed expressions (typing.Any) are disallowed in `**kwargs`
     "ERA001",
+    "N803",
     "N806"
 ]
 select = ["ALL"]
@@ -99,6 +100,9 @@ max-doc-length = 100
 convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = [
+    "D104",  # Package docstrings are intentionally omitted.
+]
 "tests/*" = [
     "SLF001",  # Private member accessed
     "PLR2004", # Magic value used in comparison

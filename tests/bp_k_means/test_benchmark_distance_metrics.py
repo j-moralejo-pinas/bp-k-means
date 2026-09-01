@@ -1,10 +1,13 @@
+"""Tests for benchmark distance metrics."""
+
 import numpy as np
 import pytest
 
-from bp_k_means.benchmark import _compute_distance_metrics
+from bp_k_means.tools.benchmark import _compute_distance_metrics
 
 
-def test_distance_metrics_use_closest_cluster_node_as_anchor():
+def test_distance_metrics_use_closest_cluster_node_as_anchor() -> None:
+    """Use the node nearest the centroid as the distance anchor."""
     X = np.array(
         [
             [0.0, 0.0],

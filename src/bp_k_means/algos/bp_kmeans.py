@@ -1,17 +1,19 @@
 """
-Unified BP-KMeans: greedy label-constrained clustering with configurable ranking
-and initialization strategies.
+Unified BP-KMeans: greedy label-constrained clustering.
+
+The module exposes configurable ranking and initialization strategies.
 """
 
 import heapq
-from hmac import new
 import logging
 from enum import Enum
 from typing import TYPE_CHECKING
 
 import numpy as np
+from numpy.typing import ArrayLike
 
-from bp_k_means.k_means import (
+from bp_k_means.algos.base_algo import BaseAlgo
+from bp_k_means.algos.k_means import (
     kmeans,
     kmeans_plus_plus_init,
     random_init,
@@ -23,9 +25,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-
 class RankingStrategy(Enum):
-    """Ranking strategies for label selection.
+    """
+    Ranking strategies for label selection.
 
     R_L:   Total WCSS of the label's clusters.
     R_C:   Maximum single-cluster WCSS within the label.
@@ -42,7 +44,8 @@ class RankingStrategy(Enum):
 
 
 class InitStrategy(Enum):
-    """Initialization strategies for centroid expansion.
+    """
+    Initialization strategies for centroid expansion.
 
     I_LRI: Re-initialize all centroids for the label.
     I_ACL: Keep existing centroids, add one new.
@@ -90,27 +93,23 @@ def _compute_rank(
 ) -> float:
     """Compute the ranking score for a label."""
     if ranking == RankingStrategy.R_L:
-        return wcss_total
-
-    if ranking == RankingStrategy.R_C:
-        return float(np.max(_wcss_per_cluster(local_labels, X2, centroids, k_y)))
-
-    if ranking == RankingStrategy.R_ERL:
+        score = wcss_total
+    elif ranking == RankingStrategy.R_C:
+        score = float(np.max(_wcss_per_cluster(local_labels, X2, centroids, k_y)))
+    elif ranking in (RankingStrategy.R_ERL, RankingStrategy.R_ERC):
         if k_y >= n_y:
-            return 0.0
-        if k_y == n_y - 1:
-            return wcss_total
-        return wcss_total / (k_y + 1)
-
-    if ranking == RankingStrategy.R_ERC:
-        if k_y >= n_y:
-            return 0.0
-        max_wcss = float(np.max(_wcss_per_cluster(local_labels, X2, centroids, k_y)))
-        if k_y == n_y - 1:
-            return max_wcss
-        return max_wcss / (k_y + 1)
-
-    raise ValueError(f"Unsupported ranking strategy: {ranking}")
+            score = 0.0
+        else:
+            base_score = (
+                wcss_total
+                if ranking == RankingStrategy.R_ERL
+                else float(np.max(_wcss_per_cluster(local_labels, X2, centroids, k_y)))
+            )
+            score = base_score if k_y == n_y - 1 else base_score / (k_y + 1)
+    else:
+        msg = f"Unsupported ranking strategy: {ranking}"
+        raise ValueError(msg)
+    return score
 
 
 def _build_init_centroids(
@@ -175,7 +174,8 @@ def _build_init_centroids(
 
         return init_c
 
-    raise ValueError(f"Unsupported init strategy: {strategy}")
+    msg = f"Unsupported init strategy: {strategy}"
+    raise ValueError(msg)
 
 
 def _call_init_algorithm(
@@ -195,7 +195,8 @@ def _call_init_algorithm(
         )
     if init_algorithm == InitAlgorithm.RANDOM_SAMPLING:
         return random_init(pts, k, rng, existing_centroids=existing_centroids)
-    raise ValueError(f"Unsupported init algorithm: {init_algorithm}")
+    msg = f"Unsupported init algorithm: {init_algorithm}"
+    raise ValueError(msg)
 
 
 def _run_split(
@@ -212,7 +213,8 @@ def _run_split(
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
     subsample_size: int = 1000,
 ) -> "tuple[float, NDArray, NDArray]":
-    """Run n_init k-means attempts with new_k clusters.
+    """
+    Run n_init k-means attempts with new_k clusters.
 
     Returns (best_wcss, best_labels, best_centroids).
     """
@@ -253,17 +255,17 @@ def _run_split(
 
 
 def bp_kmeans(
-    X,
-    y,
-    target_k,
-    seed=42,
-    n_init=10,
+    X: "NDArray",
+    y: "NDArray",
+    target_k: int,
+    seed: int | np.random.Generator = 42,
+    n_init: int = 10,
     *,
     ranking_strategy: RankingStrategy = RankingStrategy.R_ERL,
     init_strategy: InitStrategy = InitStrategy.I_CRI,
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
     subsample_size: int = 1000,
-):
+) -> "NDArray":
     """
     BP-KMeans: greedy label-constrained clustering.
 
@@ -272,13 +274,13 @@ def bp_kmeans(
 
     Parameters
     ----------
-    X : array-like, shape (n, d)
+    X : NDArray
         Dataset.
-    y : array-like, shape (n,)
+    y : NDArray
         Pre-existing categorical labels.
     target_k : int
         Desired total number of clusters.
-    seed : int or np.random.Generator
+    seed : int | np.random.Generator
         Random seed.
     n_init : int
         Number of k-means restarts per split.
@@ -294,8 +296,13 @@ def bp_kmeans(
 
     Returns
     -------
-    labels : ndarray, shape (n,)
+    labels : NDArray
         Cluster assignments in [0, target_k).
+
+    Raises
+    ------
+    ValueError
+        If the requested cluster count or initialization is infeasible.
     """
     rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
     X = np.asarray(X)
@@ -303,13 +310,15 @@ def bp_kmeans(
     _, y = np.unique(y, return_inverse=True)
 
     n_samples = X.shape[0]
-    classes = np.unique(y)
+    classes: list[int] = [int(c) for c in np.unique(y)]
     n_classes = len(classes)
 
     if target_k > n_samples:
-        raise ValueError("target_k cannot be larger than number of data points")
+        msg = "target_k cannot be larger than number of data points"
+        raise ValueError(msg)
     if target_k < n_classes:
-        raise ValueError("target_k cannot be smaller than number of unique classes in y")
+        msg = "target_k cannot be smaller than number of unique classes in y"
+        raise ValueError(msg)
     if target_k == n_samples:
         return np.arange(n_samples)
 
@@ -330,16 +339,16 @@ def bp_kmeans(
 
     groups = np.split(X_sorted, split_indices)
     idx_groups = np.split(order, split_indices)
-    unique_y_vals = np.nonzero(counts)[0]
+    unique_y_vals = [int(c) for c in np.nonzero(counts)[0]]
 
     points_per_class = dict(zip(unique_y_vals, groups, strict=True))
     idx_per_class = dict(zip(unique_y_vals, idx_groups, strict=True))
 
     # Per-class state: centroids, local labels, WCSS, precomputed squared norms
-    centroids_per_class: dict[int, "NDArray"] = {}
-    class_labels: dict[int, "NDArray"] = {}
+    centroids_per_class: dict[int, NDArray] = {}
+    class_labels: dict[int, NDArray] = {}
     wcss_per_class: dict[int, float] = {}
-    X2_per_class: dict[int, "NDArray"] = {}
+    X2_per_class: dict[int, NDArray] = {}
     sum_X2_per_class: dict[int, float] = {}
 
     for c in classes:
@@ -448,26 +457,26 @@ def bp_kmeans(
 
 
 def _bp_kmeans_precomputed(
-    classes,
-    target_k,
-    n_init,
-    rng,
-    init_strategy,
-    points_per_class,
-    idx_per_class,
-    centroids_per_class,
-    class_labels,
-    wcss_per_class,
-    X2_per_class,
-    sum_X2_per_class,
-    global_cluster_of_class,
-    current_cluster_id,
-    n_samples,
+    classes: list[int],
+    target_k: int,
+    n_init: int,
+    rng: np.random.Generator,
+    init_strategy: InitStrategy,
+    points_per_class: dict[int, "NDArray"],
+    idx_per_class: dict[int, "NDArray"],
+    centroids_per_class: dict[int, "NDArray"],
+    class_labels: dict[int, "NDArray"],
+    wcss_per_class: dict[int, float],
+    X2_per_class: dict[int, "NDArray"],
+    sum_X2_per_class: dict[int, float],
+    global_cluster_of_class: dict[int, list[int]],
+    current_cluster_id: int,
+    n_samples: int,
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
     subsample_size: int = 1000,
-):
+) -> "NDArray":
     """R_RL variant: precompute trial splits to rank by exact WCSS reduction."""
-    pending_splits: dict[int, tuple[float, "NDArray", "NDArray"]] = {}
+    pending_splits: dict[int, tuple[float, NDArray, NDArray]] = {}
     heap: list[tuple[float, int]] = []
 
     def precompute_next_split(c: int) -> None:
@@ -534,3 +543,84 @@ def _bp_kmeans_precomputed(
         labels_global[idx_per_class[c]] = global_ids[class_labels[c]]
 
     return labels_global
+
+
+class BPKMeans(BaseAlgo):
+    """Common-interface wrapper around the boundary-preserving algorithm."""
+
+    def __init__(
+        self,
+        ranking_strategy: RankingStrategy = RankingStrategy.R_ERL,
+        init_strategy: InitStrategy = InitStrategy.I_CRI,
+        init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
+        subsample_size: int = 1000,
+        seed: int | np.random.Generator = 42,
+        n_init: int = 10,
+    ) -> None:
+        """Initialize a BP-KMeans algorithm.
+
+        Parameters
+        ----------
+        ranking_strategy : RankingStrategy
+            Strategy used to select the next label to split.
+        init_strategy : InitStrategy
+            Strategy used to initialize each split.
+        init_algorithm : InitAlgorithm
+            Centroid initialization algorithm.
+        subsample_size : int
+            Subsample size for subsampled k-means++ initialization.
+        seed : int | np.random.Generator
+            Seed or random generator used by the algorithm.
+        n_init : int
+            Number of k-means restarts per split.
+        """
+        super().__init__(seed=seed, n_init=n_init)
+        self.ranking_strategy = ranking_strategy
+        self.init_strategy = init_strategy
+        self.init_algorithm = init_algorithm
+        self.subsample_size = subsample_size
+
+    def fit(
+        self,
+        X: ArrayLike,
+        y: ArrayLike | None,
+        target_k: int,
+    ) -> "BPKMeans":
+        """Fit BP-KMeans and store the resulting cluster labels.
+
+        Parameters
+        ----------
+        X : ArrayLike
+            Feature matrix.
+        y : ArrayLike | None
+            Original labels that constrain cluster membership.
+        target_k : int
+            Requested number of clusters.
+
+        Returns
+        -------
+        BPKMeans
+            The fitted algorithm instance.
+
+        Raises
+        ------
+        ValueError
+            If original labels are not provided.
+        """
+        if y is None:
+            msg = "BPKMeans requires original labels"
+            raise ValueError(msg)
+        X_array = np.asarray(X)
+        y_array = np.asarray(y)
+        labels = bp_kmeans(
+            X_array,
+            y_array,
+            target_k,
+            seed=self.seed,
+            n_init=self.n_init,
+            ranking_strategy=self.ranking_strategy,
+            init_strategy=self.init_strategy,
+            init_algorithm=self.init_algorithm,
+            subsample_size=self.subsample_size,
+        )
+        return self._set_result(labels)

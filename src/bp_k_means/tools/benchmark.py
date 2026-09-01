@@ -1,3 +1,5 @@
+"""Benchmark runners and output helpers for the clustering algorithms."""
+
 import json
 import logging
 import re
@@ -7,22 +9,20 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from bp_k_means.bisecting_k_means_optimized import (
-    bisecting_kmeans_by_label_optimized_no_refine,
+from bp_k_means.algos.base_algo import BaseAlgo
+from bp_k_means.algos.bisecting_k_means_optimized import BisectingKMeansNoRefine
+from bp_k_means.algos.bp_kmeans import BPKMeans, InitAlgorithm, InitStrategy, RankingStrategy
+from bp_k_means.algos.cop_k_means import COPKMeans
+from bp_k_means.algos.hac import HACWardNNC
+from bp_k_means.algos.precomputed_bisecting_k_means_optimized import (
+    PrecomputedBisectingKMeansNoRefine,
 )
-from bp_k_means.bp_kmeans import InitAlgorithm, InitStrategy, RankingStrategy, bp_kmeans
-from bp_k_means.cop_k_means import cop_kmeans_by_class
-from bp_k_means.hac import hac_ward_nnc_by_label
-from bp_k_means.main import overall_wcss
-from bp_k_means.precomputed_bisecting_k_means_optimized import (
-    precomputed_bisecting_kmeans_by_label_optimized_no_refine,
-)
+from bp_k_means.utils.metrics import overall_wcss
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 OUTPUT_DIR = Path("output")
-
 
 def _compute_centroids(X: np.ndarray, labels: np.ndarray) -> pd.DataFrame:
     unique_labels = np.unique(labels)
@@ -48,10 +48,11 @@ def _compute_wcss_per_cluster_array(X: np.ndarray, labels: np.ndarray) -> np.nda
 
 
 def _compute_wcss_per_label_array(X: np.ndarray, y: np.ndarray, labels: np.ndarray) -> np.ndarray:
-    """Return an array of WCSS values, one per unique original label in y.
+    """
+    Return an array of WCSS values, one per unique original label in y.
 
-    Each entry is the sum of squared distances of all points belonging to that
-    label from their respective (globally computed) cluster centroids.
+    Each entry is the sum of squared distances of all points belonging to that label from their
+    respective (globally computed) cluster centroids.
     """
     unique_clusters = np.unique(labels)
     centroids = {int(c): X[labels == c].mean(axis=0) for c in unique_clusters}
@@ -105,7 +106,7 @@ def _save_run_outputs(
     run_dir = output_dir / dataset_name / safe_alg / (run_name or f"k{k}_ninit{n_init}")
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    n_clusters = int(len(np.unique(labels)))
+    n_clusters = len(np.unique(labels))
 
     # centroids.csv
     _compute_centroids(X, labels).to_csv(run_dir / "centroids.csv", index=False)
@@ -125,42 +126,40 @@ def _save_run_outputs(
         "duration_seconds": duration,
         "wcss_total": wcss,
         "n_clusters": n_clusters,
-        "n_labels": int(len(np.unique(y))),
+        "n_labels": len(np.unique(y)),
         "wcss_per_cluster": _wcss_stats(wcss_cluster_arr),
         "wcss_per_label": _wcss_stats(wcss_label_arr),
     }
     if extra_metadata:
         metadata.update(extra_metadata)
-    with open(run_dir / "metadata.json", "w") as f:
+    with (run_dir / "metadata.json").open("w") as f:
         json.dump(metadata, f, indent=2)
 
     # instances.parquet  — coordinates + original class label + cluster assignment
-    instances_df = pd.DataFrame(X, columns=["x_utm", "y_utm"])
+    instances_df = pd.DataFrame(X, columns=pd.Index(["x_utm", "y_utm"]))
     instances_df["class_label"] = y
     instances_df["cluster"] = labels
     instances_df.to_parquet(run_dir / "instances.parquet", index=False)
 
 
-def run_cop_kmeans(X, y, k, seed, n_init, init_ensure_class):
-    rng = np.random.default_rng(seed)
-    best_wcss = float("inf")
-    best_labels = None
-
-    for i in range(n_init):
-        current_seed = rng.integers(2**32)
-        labels, _ = cop_kmeans_by_class(
-            X, y, k, seed=current_seed, init_ensure_class=init_ensure_class
-        )
-
-        if labels is None:
-            continue
-
-        wcss = overall_wcss(X, labels)
-        if wcss < best_wcss:
-            best_wcss = wcss
-            best_labels = labels
-
-    return best_labels
+def run_cop_kmeans(
+    X: np.ndarray,
+    y: np.ndarray,
+    k: int,
+    seed: int | np.random.Generator,
+    n_init: int,
+    *,
+    init_ensure_class: bool,
+) -> np.ndarray | None:
+    """Run COP-KMeans repeatedly and return the run with the lowest WCSS."""
+    try:
+        return COPKMeans(
+            seed=seed,
+            n_init=n_init,
+            init_ensure_class=init_ensure_class,
+        ).fit_predict(X, y, k)
+    except RuntimeError:
+        return None
 
 
 K_MULTIPLIERS = [1.5, 2, 4]
@@ -173,23 +172,19 @@ def _is_regular_benchmark_dataset(path: Path) -> bool:
     return not any(pattern in stem for pattern in REGULAR_BENCHMARK_DATASET_EXCLUDE_PATTERNS)
 
 
-def _build_algorithms() -> list:
+def _build_algorithms() -> list[tuple[str, BaseAlgo]]:
     return [
         *[
             (
                 f"BP-KMeans ({ranking.name}, {init.name}, {init_algo.name})",
-                lambda X, y, k, seed, n_init=n_in, r=ranking, i=init, ia=init_algo: bp_kmeans(
-                    X,
-                    y,
-                    k,
-                    seed=seed,
-                    n_init=n_init,
-                    ranking_strategy=r,
-                    init_strategy=i,
-                    init_algorithm=ia,
+                BPKMeans(
+                    seed=42,
+                    n_init=n_in,
+                    ranking_strategy=ranking,
+                    init_strategy=init,
+                    init_algorithm=init_algo,
                     subsample_size=10,
                 ),
-                n_in,
             )
             for init_algo in [InitAlgorithm.KMEANS_PLUS_PLUS]  # , InitAlgorithm.RANDOM_SAMPLING]
             for ranking in RankingStrategy
@@ -199,80 +194,78 @@ def _build_algorithms() -> list:
         *[
             (
                 "Bisecting KMeans",
-                lambda X, y, k, seed, n_init=n_in: bisecting_kmeans_by_label_optimized_no_refine(
-                    X, y, k, seed=seed, n_init=n_init
-                ),
-                n_in,
+                BisectingKMeansNoRefine(seed=42, n_init=n_in),
             )
             for n_in in N_INITS
         ],
         *[
             (
                 "Bisecting KMeans (R_RL)",
-                lambda X,
-                y,
-                k,
-                seed,
-                n_init=n_in: precomputed_bisecting_kmeans_by_label_optimized_no_refine(
-                    X, y, k, seed=seed, n_init=n_init
-                ),
-                n_in,
+                PrecomputedBisectingKMeansNoRefine(seed=42, n_init=n_in),
             )
             for n_in in N_INITS
         ],
-        # (
-        #     "HAC Ward (NNC)",
-        #     lambda X, y, k, seed: hac_ward_nnc_by_label(X, y, target_k=k),
-        #     1,
-        # ),
+        ("HAC Ward (NNC)", HACWardNNC(seed=42)),
     ]
 
 
-def run_benchmark():
+def run_benchmark() -> None:
+    """Run the regular benchmark suite for all available datasets."""
     datasets_dir = Path("data/datasets")
     dataset_files = list(datasets_dir.glob("*nodes.parquet"))
     dataset_files = [f for f in dataset_files if _is_regular_benchmark_dataset(f)]
 
     if not dataset_files:
-        logger.error(f"No parquet files found in {datasets_dir}")
+        logger.error("No parquet files found in %s", datasets_dir)
         return
 
     algorithms = _build_algorithms()
 
     for dataset_path in dataset_files:
-        logger.info(f"Loading dataset: {dataset_path.name}")
+        logger.info("Loading dataset: %s", dataset_path.name)
         try:
             df = pd.read_parquet(dataset_path)
-            X = df[["x_utm", "y_utm"]].values
-            y = df["CUSEC"].values
+            X = df[["x_utm", "y_utm"]].to_numpy()
+            y = df["CUSEC"].to_numpy()
 
             n_instances = len(X)
             n_labels = len(np.unique(y))
-        except Exception as e:
-            logger.error(f"Failed to process dataset {dataset_path.name}: {e}")
+        except Exception:
+            logger.exception("Failed to process dataset %s", dataset_path.name)
+            continue
 
-        logger.info(f"  Instances: {n_instances}, Labels: {n_labels}")
+        logger.info("  Instances: %s, Labels: %s", n_instances, n_labels)
 
         for k_mult in K_MULTIPLIERS:
             target_k = int(n_labels * k_mult)
 
             if target_k > n_instances:
                 logger.warning(
-                    f"  Skipping k={target_k} (x{k_mult}) because it exceeds n_instances ({n_instances})"
+                    "  Skipping k=%s (x%s) because it exceeds n_instances (%s)",
+                    target_k,
+                    k_mult,
+                    n_instances,
                 )
                 continue
 
-            for alg_name, alg_func, n_init in algorithms:
-                logger.info(f"  Running {alg_name} | k={target_k} (x{k_mult}) | n_init={n_init}")
+            for alg_name, algo in algorithms:
+                n_init = algo.n_init
+                logger.info(
+                    "  Running %s | k=%s (x%s) | n_init=%s",
+                    alg_name,
+                    target_k,
+                    k_mult,
+                    n_init,
+                )
 
                 start_time = time.time()
 
-                labels = alg_func(X, y, target_k, seed=42)
+                labels = algo.fit_predict(X, y, target_k)
                 end_time = time.time()
                 duration = end_time - start_time
 
                 if labels is None:
-                    logger.error(f"    {alg_name} failed to produce labels.")
+                    logger.error("    %s failed to produce labels.", alg_name)
                     wcss = np.nan
                     n_clusters = 0
                 else:
@@ -292,12 +285,16 @@ def run_benchmark():
                     )
 
                 logger.info(
-                    f"    -> Time: {duration:.4f}s | WCSS: {wcss:.4f} | Clusters: {n_clusters}"
+                    "    -> Time: %.4fs | WCSS: %.4f | Clusters: %s",
+                    duration,
+                    wcss,
+                    n_clusters,
                 )
 
 
 def run_hac_strength_benchmark(cluster_multiplier: float = 1.5) -> None:
-    """Run the HAC-strength benchmark.
+    """
+    Run the HAC-strength benchmark.
 
     The target number of clusters is computed as
     ``cluster_multiplier * n_instances`` for each dataset. Since a clustering
@@ -305,13 +302,14 @@ def run_hac_strength_benchmark(cluster_multiplier: float = 1.5) -> None:
     capped at ``n_instances`` and recorded in metadata.
     """
     if cluster_multiplier <= 0:
-        raise ValueError("cluster_multiplier must be positive")
+        msg = "cluster_multiplier must be positive"
+        raise ValueError(msg)
 
     datasets_dir = Path("data/datasets")
     dataset_files = list(datasets_dir.glob("*nodes.parquet"))
 
     if not dataset_files:
-        logger.error(f"No parquet files found in {datasets_dir}")
+        logger.error("No parquet files found in %s", datasets_dir)
         return
 
     algorithms = _build_algorithms()
@@ -319,16 +317,16 @@ def run_hac_strength_benchmark(cluster_multiplier: float = 1.5) -> None:
     safe_multiplier = str(cluster_multiplier).replace(".", "_")
 
     for dataset_path in dataset_files:
-        logger.info(f"Loading dataset: {dataset_path.name}")
+        logger.info("Loading dataset: %s", dataset_path.name)
         try:
             df = pd.read_parquet(dataset_path)
-            X = df[["x_utm", "y_utm"]].values
-            y = df["CUSEC"].values
+            X = df[["x_utm", "y_utm"]].to_numpy()
+            y = df["CUSEC"].to_numpy()
 
             n_instances = len(X)
             n_labels = len(np.unique(y))
-        except Exception as e:
-            logger.error(f"Failed to process dataset {dataset_path.name}: {e}")
+        except Exception:
+            logger.exception("Failed to process dataset %s", dataset_path.name)
             continue
 
         requested_target_k = int(n_instances * cluster_multiplier)
@@ -359,7 +357,8 @@ def run_hac_strength_benchmark(cluster_multiplier: float = 1.5) -> None:
             )
             continue
 
-        for alg_name, alg_func, n_init in algorithms:
+        for alg_name, algo in algorithms:
+            n_init = algo.n_init
             safe_alg = re.sub(r"[^\w]", "_", alg_name).strip("_")
             run_name = f"nodesx{safe_multiplier}_k{target_k}_ninit{n_init}"
             meta_path = output_dir / dataset_path.stem / safe_alg / run_name / "metadata.json"
@@ -382,11 +381,11 @@ def run_hac_strength_benchmark(cluster_multiplier: float = 1.5) -> None:
             )
 
             start_time = time.time()
-            labels = alg_func(X, y, target_k, seed=42)
+            labels = algo.fit_predict(X, y, target_k)
             duration = time.time() - start_time
 
             if labels is None:
-                logger.error(f"    {alg_name} failed to produce labels.")
+                logger.error("    %s failed to produce labels.", alg_name)
                 wcss = np.nan
                 n_clusters = 0
             else:
@@ -415,7 +414,12 @@ def run_hac_strength_benchmark(cluster_multiplier: float = 1.5) -> None:
                     },
                 )
 
-            logger.info(f"    -> Time: {duration:.4f}s | WCSS: {wcss:.4f} | Clusters: {n_clusters}")
+            logger.info(
+                "    -> Time: %.4fs | WCSS: %.4f | Clusters: %s",
+                duration,
+                wcss,
+                n_clusters,
+            )
 
 
 def _compute_distance_metrics(X: np.ndarray, labels: np.ndarray, y: np.ndarray) -> dict:
@@ -458,29 +462,30 @@ def _compute_distance_metrics(X: np.ndarray, labels: np.ndarray, y: np.ndarray) 
 
 
 def benchmark_com_madrid_avg_distance_to_centroid() -> None:
-    """Benchmark: average distance to centroid at k=10000 for all algorithms (Community of Madrid)."""
+    """Benchmark average distance to centroid at k=10000 for Community of Madrid."""
     dataset_path = Path("data/datasets") / "com_madrid_osm_drive_nodes_split_split.parquet"
     if not dataset_path.exists():
-        logger.error(f"Dataset not found: {dataset_path}")
+        logger.error("Dataset not found: %s", dataset_path)
         return
 
-    logger.info(f"Loading {dataset_path.name}")
+    logger.info("Loading %s", dataset_path.name)
     df = pd.read_parquet(dataset_path)
-    X = df[["x_utm", "y_utm"]].values
-    y = df["CUSEC"].values
+    X = df[["x_utm", "y_utm"]].to_numpy()
+    y = df["CUSEC"].to_numpy()
     target_k = 10000
-    logger.info(f"  Instances: {len(X)} | k={target_k}")
+    logger.info("  Instances: %s | k=%s", len(X), target_k)
 
     algorithms = _build_algorithms()
 
-    for alg_name, alg_func, n_init in algorithms:
-        logger.info(f"  Running {alg_name} | k={target_k} | n_init={n_init}")
+    for alg_name, algo in algorithms:
+        n_init = algo.n_init
+        logger.info("  Running %s | k=%s | n_init=%s", alg_name, target_k, n_init)
         start_time = time.time()
-        labels = alg_func(X, y, target_k, seed=42)
+        labels = algo.fit_predict(X, y, target_k)
         duration = time.time() - start_time
 
         if labels is None:
-            logger.error(f"    {alg_name} failed to produce labels.")
+            logger.error("    %s failed to produce labels.", alg_name)
             continue
 
         wcss = overall_wcss(X, labels)
@@ -507,19 +512,20 @@ def benchmark_com_madrid_avg_distance_to_centroid() -> None:
             / f"k{target_k}_ninit{n_init}"
             / "metadata.json"
         )
-        with open(meta_path) as f:
+        with meta_path.open() as f:
             meta = json.load(f)
         meta.update(dist_metrics)
-        with open(meta_path, "w") as f:
+        with meta_path.open("w") as f:
             json.dump(meta, f, indent=2)
 
         logger.info(
-            f"    -> avg dist to node: "
-            f"{dist_metrics['avg_dist_to_representative_node_m']:.2f} m | "
-            f"max dist to node: {dist_metrics['max_dist_to_representative_node_m']:.2f} m | "
-            f"mean-max/label: "
-            f"{dist_metrics['mean_max_dist_per_label_to_representative_node_m']:.2f} m | "
-            f"clusters: {len(np.unique(labels))} | time: {duration:.4f}s"
+            "    -> avg dist to node: %.2f m | max dist to node: %.2f m | "
+            "mean-max/label: %.2f m | clusters: %s | time: %.4fs",
+            dist_metrics["avg_dist_to_representative_node_m"],
+            dist_metrics["max_dist_to_representative_node_m"],
+            dist_metrics["mean_max_dist_per_label_to_representative_node_m"],
+            len(np.unique(labels)),
+            duration,
         )
 
 
@@ -527,31 +533,37 @@ def benchmark_castile_leon_max_response_time() -> None:
     """Benchmark: maximum response time at k=200 using province labels (Castile and León)."""
     dataset_path = Path("data/datasets") / "castile_and_leon_osm_drive_nodes.parquet"
     if not dataset_path.exists():
-        logger.error(f"Dataset not found: {dataset_path}")
+        logger.error("Dataset not found: %s", dataset_path)
         return
 
-    logger.info(f"Loading {dataset_path.name}")
+    logger.info("Loading %s", dataset_path.name)
     df = pd.read_parquet(dataset_path)
-    X = df[["x_utm", "y_utm"]].values
-    y = df["CPRO"].values  # province labels
+    X = df[["x_utm", "y_utm"]].to_numpy()
+    y = df["CPRO"].to_numpy()  # province labels
     target_k = 200
-    logger.info(f"  Instances: {len(X)} | unique provinces: {len(np.unique(y))} | k={target_k}")
+    logger.info(
+        "  Instances: %s | unique provinces: %s | k=%s",
+        len(X),
+        len(np.unique(y)),
+        target_k,
+    )
 
     if target_k > len(X):
-        logger.error(f"k={target_k} exceeds n_instances={len(X)}. Aborting.")
+        logger.error("k=%s exceeds n_instances=%s. Aborting.", target_k, len(X))
         return
 
     algorithms = _build_algorithms()
 
-    for alg_name, alg_func, n_init in algorithms:
+    for alg_name, algo in algorithms:
+        n_init = algo.n_init
         # only benchmark n_init=8 for max response time
-        logger.info(f"  Running {alg_name} | k={target_k} | n_init={n_init}")
+        logger.info("  Running %s | k=%s | n_init=%s", alg_name, target_k, n_init)
         t0 = time.time()
-        labels = alg_func(X, y, target_k, seed=42)
+        labels = algo.fit_predict(X, y, target_k)
         duration = time.time() - t0
 
         if labels is None:
-            logger.error(f"    {alg_name} failed to produce labels.")
+            logger.error("    %s failed to produce labels.", alg_name)
             continue
 
         wcss = overall_wcss(X, labels)
@@ -578,19 +590,20 @@ def benchmark_castile_leon_max_response_time() -> None:
             / f"k{target_k}_ninit{n_init}"
             / "metadata.json"
         )
-        with open(meta_path) as f:
+        with meta_path.open() as f:
             meta = json.load(f)
         meta["response_time_s"] = duration
         meta.update(dist_metrics)
-        with open(meta_path, "w") as f:
+        with meta_path.open("w") as f:
             json.dump(meta, f, indent=2)
 
         logger.info(
-            f"    -> time: {duration:.4f}s | "
-            f"avg dist to node: {dist_metrics['avg_dist_to_representative_node_m']:.2f} m | "
-            f"max dist to node: {dist_metrics['max_dist_to_representative_node_m']:.2f} m | "
-            f"mean-max/label: "
-            f"{dist_metrics['mean_max_dist_per_label_to_representative_node_m']:.2f} m"
+            "    -> time: %.4fs | avg dist to node: %.2f m | "
+            "max dist to node: %.2f m | mean-max/label: %.2f m",
+            duration,
+            dist_metrics["avg_dist_to_representative_node_m"],
+            dist_metrics["max_dist_to_representative_node_m"],
+            dist_metrics["mean_max_dist_per_label_to_representative_node_m"],
         )
 
 

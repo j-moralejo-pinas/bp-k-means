@@ -1,25 +1,36 @@
+"""Bisecting k-means variants that cache split candidates per label."""
+
 import heapq
 import logging
-from typing import TYPE_CHECKING, Tuple, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
+from numpy.typing import ArrayLike
 
-from bp_k_means.k_means import kmeans, kmeans_plus_plus_init
+from bp_k_means.algos.base_algo import BaseAlgo
+from bp_k_means.algos.k_means import kmeans, kmeans_plus_plus_init
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 logger = logging.getLogger(__name__)
+MIN_SPLIT_POINTS = 2
 
-
-def precomputed_bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_init=10):
+def precomputed_bisecting_kmeans_by_label_optimized(  # noqa: C901 - candidate orchestration
+    X: "NDArray",
+    y: "NDArray",
+    target_k: int,
+    seed: int | np.random.Generator = 42,
+    n_init: int = 10,
+) -> "NDArray":
     """
     Bisecting K-Means with label constraint and precomputed splits (Refine Cluster strategy).
 
     In this version (Refine Cluster):
     - We maintain the clustering state for each class label.
     - We precompute the effect of splitting one more cluster for each class.
-    - Since we have the whole class data, we can re-run k-means on the whole class with k+1 centroids
+    - Since we have the whole class data, we can re-run k-means on the whole class with k+1
+      centroids
       (seeded from previous centroids + split of the worst cluster).
     - The heap stores the ACTUAL reduction in WCSS for the entire class if we increment k by 1.
     """
@@ -32,7 +43,8 @@ def precomputed_bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_i
     n_labels = len(unique_labels)
 
     if n_init < 1:
-        raise ValueError("n_init must be >= 1")
+        msg = "n_init must be >= 1"
+        raise ValueError(msg)
     if target_k < n_labels:
         msg = f"target_k={target_k} < number of labels={n_labels}."
         raise ValueError(msg)
@@ -61,10 +73,10 @@ def precomputed_bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_i
     sum_X2_per_label: dict[int, float] = {}
 
     # Pending splits: label_idx -> (new_wcss, new_labels, new_centroids)
-    pending_splits: dict[int, Tuple[float, NDArray, NDArray]] = {}
+    pending_splits: dict[int, tuple[float, NDArray, NDArray]] = {}
 
     # Heap: (-reduction, label_idx)
-    heap: list[Tuple[float, int]] = []
+    heap: list[tuple[float, int]] = []
 
     current_total_clusters = 0
 
@@ -92,7 +104,7 @@ def precomputed_bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_i
         local_labels_per_label[lbl_idx] = np.zeros(pts.shape[0], dtype=int)
         wcss_per_label[lbl_idx] = wcss
 
-    def precompute_next_split_refine(lbl_idx: int):
+    def precompute_next_split_refine(lbl_idx: int) -> None:
         pts = points_per_label[lbl_idx]
         current_centroids = centroids_per_label[lbl_idx]
         local_labels = local_labels_per_label[lbl_idx]
@@ -140,14 +152,14 @@ def precomputed_bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_i
         init_centroids_base[max_wcss_idx:-2] = current_centroids[max_wcss_idx + 1 :]
 
         target_pts = pts[local_labels == max_wcss_idx]
-        if len(target_pts) < 2:
+        if len(target_pts) < MIN_SPLIT_POINTS:
             return
 
         for _ in range(n_init):
-            if len(target_pts) == 2:
+            if len(target_pts) == MIN_SPLIT_POINTS:
                 new_pair = target_pts
             else:
-                new_pair = kmeans_plus_plus_init(target_pts, 2, rng)
+                new_pair = kmeans_plus_plus_init(target_pts, MIN_SPLIT_POINTS, rng)
 
             init_centroids = init_centroids_base.copy()
             init_centroids[-2:] = new_pair
@@ -163,7 +175,7 @@ def precomputed_bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_i
                 best_new_labels = lbls
                 best_new_centroids = ctrs
 
-        if best_new_labels is not None:
+        if best_new_labels is not None and best_new_centroids is not None:
             current_wcss = wcss_per_label[lbl_idx]
             reduction = current_wcss - best_wcss_total
 
@@ -178,7 +190,7 @@ def precomputed_bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_i
         if not heap:
             break
 
-        neg_red, best_lbl = heapq.heappop(heap)
+        _neg_red, best_lbl = heapq.heappop(heap)
 
         if best_lbl not in pending_splits:
             continue
@@ -210,21 +222,29 @@ def precomputed_bisecting_kmeans_by_label_optimized(X, y, target_k, seed=42, n_i
 
 
 class ClusterNode:
-    id: int
+    """Store one active cluster and its best cached split."""
+
+    cluster_id: int
     lbl_idx: int
     indices: "NDArray"  # boolean mask relative to label group
     centroid: "NDArray"
     wcss: float
     X2_sum: float
 
-    # Pending split info
-    split_reduction: float
-    split_info: Optional[Tuple["NDArray", "NDArray", "NDArray", "NDArray"]] = (
+    split_info: tuple["NDArray", "NDArray", "NDArray", "NDArray"] | None = (
         None  # labels, centroids, wcss_pair, counts
     )
 
-    def __init__(self, id, lbl_idx, indices, centroid, wcss, X2_sum):
-        self.id = id
+    def __init__(
+        self,
+        cluster_id: int,
+        lbl_idx: int,
+        indices: "NDArray",
+        centroid: "NDArray",
+        wcss: float,
+        X2_sum: float,
+    ) -> None:
+        self.cluster_id = cluster_id
         self.lbl_idx = lbl_idx
         self.indices = indices
         self.centroid = centroid
@@ -232,7 +252,13 @@ class ClusterNode:
         self.X2_sum = X2_sum
 
 
-def precomputed_bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, seed=42, n_init=10):
+def precomputed_bisecting_kmeans_by_label_optimized_no_refine(  # noqa: C901, PLR0912
+    X: "NDArray",
+    y: "NDArray",
+    target_k: int,
+    seed: int | np.random.Generator = 42,
+    n_init: int = 10,
+) -> "NDArray":
     """
     Bisecting K-Means with label constraint and precomputed splits (No Refine strategy).
 
@@ -272,7 +298,7 @@ def precomputed_bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, se
     cluster_map: dict[int, ClusterNode] = {}
     next_cluster_id = 0
 
-    heap: list[Tuple[float, int]] = []
+    heap: list[tuple[float, int]] = []
 
     # Calculate X2 per label upfront
     for lbl_idx in range(n_labels):
@@ -282,15 +308,14 @@ def precomputed_bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, se
 
     current_total_clusters = 0
 
-    def compute_split_candidate(node: ClusterNode):
+    def compute_split_candidate(node: ClusterNode) -> None:
         pts = points_per_label[node.lbl_idx]
         X2 = X2_per_label_list[node.lbl_idx]
 
         cluster_pts = pts[node.indices]
         cluster_X2 = X2[node.indices]
 
-        if cluster_pts.shape[0] < 2:
-            node.split_reduction = -1.0
+        if cluster_pts.shape[0] < MIN_SPLIT_POINTS:
             return
 
         best_wcss_total = float("inf")
@@ -300,15 +325,15 @@ def precomputed_bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, se
         best_counts = None
 
         for _ in range(n_init):
-            if cluster_pts.shape[0] == 2:
+            if cluster_pts.shape[0] == MIN_SPLIT_POINTS:
                 init_c = cluster_pts
             else:
-                init_c = kmeans_plus_plus_init(cluster_pts, 2, rng)
+                init_c = kmeans_plus_plus_init(cluster_pts, MIN_SPLIT_POINTS, rng)
 
             sub_lbls, sub_ctrs = kmeans(cluster_pts, k=2, seed=rng, init_centroids=init_c)
 
-            sub_counts = np.bincount(sub_lbls, minlength=2)
-            sub_X2_sums = np.bincount(sub_lbls, weights=cluster_X2, minlength=2)
+            sub_counts = np.bincount(sub_lbls, minlength=MIN_SPLIT_POINTS)
+            sub_X2_sums = np.bincount(sub_lbls, weights=cluster_X2, minlength=MIN_SPLIT_POINTS)
 
             wcss_split = sub_X2_sums - sub_counts * np.einsum("ij,ij->i", sub_ctrs, sub_ctrs)
             total_wcss = np.sum(wcss_split)
@@ -320,12 +345,16 @@ def precomputed_bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, se
                 best_wcss_split = wcss_split
                 best_counts = sub_counts
 
-        if best_sub_labels is not None:
+        if (
+            best_sub_labels is not None
+            and best_sub_centroids is not None
+            and best_wcss_split is not None
+            and best_counts is not None
+        ):
             reduction = node.wcss - best_wcss_total
-            node.split_reduction = reduction
             node.split_info = (best_sub_labels, best_sub_centroids, best_wcss_split, best_counts)
 
-            heapq.heappush(heap, (-reduction, node.id))
+            heapq.heappush(heap, (-reduction, node.cluster_id))
 
     # Independent Init
     for lbl_idx in range(n_labels):
@@ -353,17 +382,15 @@ def precomputed_bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, se
         if not heap:
             break
 
-        neg_red, cid = heapq.heappop(heap)
+        _neg_red, cid = heapq.heappop(heap)
         node = cluster_map.get(cid)
 
         if node is None:
-            # Stale or removed
             continue
 
         if node.split_info is None:
             continue
 
-        # Perform split
         sub_labels, sub_centroids, sub_wcss_pair, sub_counts = node.split_info
 
         # Remove old node
@@ -457,3 +484,93 @@ def precomputed_bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, se
             global_counter += 1
 
     return labels_final
+
+
+class PrecomputedBisectingKMeans(BaseAlgo):
+    """Common-interface wrapper around refined precomputed bisecting k-means."""
+
+    def fit(
+        self,
+        X: ArrayLike,
+        y: ArrayLike | None,
+        target_k: int,
+    ) -> "PrecomputedBisectingKMeans":
+        """Fit refined precomputed bisecting k-means.
+
+        Parameters
+        ----------
+        X : ArrayLike
+            Feature matrix.
+        y : ArrayLike | None
+            Original labels that constrain cluster membership.
+        target_k : int
+            Requested number of clusters.
+
+        Returns
+        -------
+        PrecomputedBisectingKMeans
+            The fitted algorithm instance.
+
+        Raises
+        ------
+        ValueError
+            If original labels are not provided.
+        """
+        if y is None:
+            msg = "PrecomputedBisectingKMeans requires original labels"
+            raise ValueError(msg)
+        X_array = np.asarray(X)
+        y_array = np.asarray(y)
+        labels = precomputed_bisecting_kmeans_by_label_optimized(
+            X_array,
+            y_array,
+            target_k,
+            seed=self.seed,
+            n_init=self.n_init,
+        )
+        return self._set_result(labels)
+
+
+class PrecomputedBisectingKMeansNoRefine(BaseAlgo):
+    """Common-interface wrapper around non-refined precomputed bisecting k-means."""
+
+    def fit(
+        self,
+        X: ArrayLike,
+        y: ArrayLike | None,
+        target_k: int,
+    ) -> "PrecomputedBisectingKMeansNoRefine":
+        """Fit non-refined precomputed bisecting k-means.
+
+        Parameters
+        ----------
+        X : ArrayLike
+            Feature matrix.
+        y : ArrayLike | None
+            Original labels that constrain cluster membership.
+        target_k : int
+            Requested number of clusters.
+
+        Returns
+        -------
+        PrecomputedBisectingKMeansNoRefine
+            The fitted algorithm instance.
+
+        Raises
+        ------
+        ValueError
+            If original labels are not provided.
+        """
+        if y is None:
+            msg = "PrecomputedBisectingKMeansNoRefine requires original labels"
+            raise ValueError(msg)
+        X_array = np.asarray(X)
+        y_array = np.asarray(y)
+        labels = precomputed_bisecting_kmeans_by_label_optimized_no_refine(
+            X_array,
+            y_array,
+            target_k,
+            seed=self.seed,
+            n_init=self.n_init,
+        )
+        return self._set_result(labels)
