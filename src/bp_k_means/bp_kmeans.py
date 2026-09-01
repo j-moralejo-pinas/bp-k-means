@@ -100,7 +100,7 @@ def _compute_rank(
             return 0.0
         if k_y == n_y - 1:
             return wcss_total
-        return wcss_total * k_y / (k_y + 1)
+        return wcss_total / (k_y + 1)
 
     if ranking == RankingStrategy.R_ERC:
         if k_y >= n_y:
@@ -108,7 +108,7 @@ def _compute_rank(
         max_wcss = float(np.max(_wcss_per_cluster(local_labels, X2, centroids, k_y)))
         if k_y == n_y - 1:
             return max_wcss
-        return max_wcss * k_y / (k_y + 1)
+        return max_wcss / (k_y + 1)
 
     raise ValueError(f"Unsupported ranking strategy: {ranking}")
 

@@ -102,9 +102,7 @@ def _save_run_outputs(
     run_name: str | None = None,
 ) -> None:
     safe_alg = re.sub(r"[^\w]", "_", alg_name).strip("_")
-    run_dir = output_dir / dataset_name / safe_alg / (
-        run_name or f"k{k}_ninit{n_init}"
-    )
+    run_dir = output_dir / dataset_name / safe_alg / (run_name or f"k{k}_ninit{n_init}")
     run_dir.mkdir(parents=True, exist_ok=True)
 
     n_clusters = int(len(np.unique(labels)))
@@ -167,12 +165,12 @@ def run_cop_kmeans(X, y, k, seed, n_init, init_ensure_class):
 
 K_MULTIPLIERS = [1.5, 2, 4]
 N_INITS = [1, 2, 4, 8, 16, 32]
-BENCHMARK_DATASET_EXCLUDE_PATTERNS = ("com_madrid", "castile_and_leon")
+REGULAR_BENCHMARK_DATASET_EXCLUDE_PATTERNS = ("com_madrid", "castile_and_leon")
 
 
-def _is_basic_benchmark_dataset(path: Path) -> bool:
+def _is_regular_benchmark_dataset(path: Path) -> bool:
     stem = path.stem.lower()
-    return not any(pattern in stem for pattern in BENCHMARK_DATASET_EXCLUDE_PATTERNS)
+    return not any(pattern in stem for pattern in REGULAR_BENCHMARK_DATASET_EXCLUDE_PATTERNS)
 
 
 def _build_algorithms() -> list:
@@ -193,7 +191,7 @@ def _build_algorithms() -> list:
                 ),
                 n_in,
             )
-            for init_algo in [InitAlgorithm.KMEANS_PLUS_PLUS, InitAlgorithm.RANDOM_SAMPLING]
+            for init_algo in [InitAlgorithm.KMEANS_PLUS_PLUS]  # , InitAlgorithm.RANDOM_SAMPLING]
             for ranking in RankingStrategy
             for init in InitStrategy
             for n_in in N_INITS
@@ -222,18 +220,18 @@ def _build_algorithms() -> list:
             )
             for n_in in N_INITS
         ],
-        (
-            "HAC Ward (NNC)",
-            lambda X, y, k, seed: hac_ward_nnc_by_label(X, y, target_k=k),
-            1,
-        ),
+        # (
+        #     "HAC Ward (NNC)",
+        #     lambda X, y, k, seed: hac_ward_nnc_by_label(X, y, target_k=k),
+        #     1,
+        # ),
     ]
 
 
 def run_benchmark():
     datasets_dir = Path("data/datasets")
     dataset_files = list(datasets_dir.glob("*nodes.parquet"))
-    dataset_files = [f for f in dataset_files if _is_basic_benchmark_dataset(f)]
+    dataset_files = [f for f in dataset_files if _is_regular_benchmark_dataset(f)]
 
     if not dataset_files:
         logger.error(f"No parquet files found in {datasets_dir}")
@@ -311,7 +309,6 @@ def run_hac_strength_benchmark(cluster_multiplier: float = 1.5) -> None:
 
     datasets_dir = Path("data/datasets")
     dataset_files = list(datasets_dir.glob("*nodes.parquet"))
-    dataset_files = [f for f in dataset_files if _is_basic_benchmark_dataset(f)]
 
     if not dataset_files:
         logger.error(f"No parquet files found in {datasets_dir}")
@@ -418,21 +415,24 @@ def run_hac_strength_benchmark(cluster_multiplier: float = 1.5) -> None:
                     },
                 )
 
-            logger.info(
-                f"    -> Time: {duration:.4f}s | WCSS: {wcss:.4f} | Clusters: {n_clusters}"
-            )
+            logger.info(f"    -> Time: {duration:.4f}s | WCSS: {wcss:.4f} | Clusters: {n_clusters}")
 
 
 def _compute_distance_metrics(X: np.ndarray, labels: np.ndarray, y: np.ndarray) -> dict:
-    """Compute avg, max, and mean-max-per-label distance to cluster centroid."""
+    """Compute distances to the node closest to each cluster centroid."""
     all_dists = np.empty(len(X))
     max_per_label: dict = {}
+    representative_indices: list[int] = []
 
     for c in np.unique(labels):
         mask = labels == c
+        cluster_indices = np.flatnonzero(mask)
         pts = X[mask]
         centroid = pts.mean(axis=0)
-        dists = np.linalg.norm(pts - centroid, axis=1)
+        representative_local_idx = int(np.argmin(np.sum((pts - centroid) ** 2, axis=1)))
+        representative = pts[representative_local_idx]
+        representative_indices.append(int(cluster_indices[representative_local_idx]))
+        dists = np.linalg.norm(pts - representative, axis=1)
         all_dists[mask] = dists
 
     # mean-max distance per original label
@@ -440,10 +440,20 @@ def _compute_distance_metrics(X: np.ndarray, labels: np.ndarray, y: np.ndarray) 
         lbl_mask = y == lbl
         max_per_label[lbl] = float(all_dists[lbl_mask].max())
 
+    avg_dist = float(all_dists.mean())
+    max_dist = float(all_dists.max())
+    mean_max_per_label = float(np.mean(list(max_per_label.values())))
+
     return {
-        "avg_dist_to_centroid_m": float(all_dists.mean()),
-        "max_dist_to_centroid_m": float(all_dists.max()),
-        "mean_max_dist_per_label_m": float(np.mean(list(max_per_label.values()))),
+        "distance_anchor": "nearest_node_to_cluster_centroid",
+        "representative_node_count": len(representative_indices),
+        "avg_dist_to_representative_node_m": avg_dist,
+        "max_dist_to_representative_node_m": max_dist,
+        "mean_max_dist_per_label_to_representative_node_m": mean_max_per_label,
+        # Backwards-compatible aliases used by existing analysis scripts.
+        "avg_dist_to_centroid_m": avg_dist,
+        "max_dist_to_centroid_m": max_dist,
+        "mean_max_dist_per_label_m": mean_max_per_label,
     }
 
 
@@ -504,9 +514,11 @@ def benchmark_com_madrid_avg_distance_to_centroid() -> None:
             json.dump(meta, f, indent=2)
 
         logger.info(
-            f"    -> avg dist: {dist_metrics['avg_dist_to_centroid_m']:.2f} m | "
-            f"max dist: {dist_metrics['max_dist_to_centroid_m']:.2f} m | "
-            f"mean-max/label: {dist_metrics['mean_max_dist_per_label_m']:.2f} m | "
+            f"    -> avg dist to node: "
+            f"{dist_metrics['avg_dist_to_representative_node_m']:.2f} m | "
+            f"max dist to node: {dist_metrics['max_dist_to_representative_node_m']:.2f} m | "
+            f"mean-max/label: "
+            f"{dist_metrics['mean_max_dist_per_label_to_representative_node_m']:.2f} m | "
             f"clusters: {len(np.unique(labels))} | time: {duration:.4f}s"
         )
 
@@ -575,16 +587,17 @@ def benchmark_castile_leon_max_response_time() -> None:
 
         logger.info(
             f"    -> time: {duration:.4f}s | "
-            f"avg dist: {dist_metrics['avg_dist_to_centroid_m']:.2f} m | "
-            f"max dist: {dist_metrics['max_dist_to_centroid_m']:.2f} m | "
-            f"mean-max/label: {dist_metrics['mean_max_dist_per_label_m']:.2f} m"
+            f"avg dist to node: {dist_metrics['avg_dist_to_representative_node_m']:.2f} m | "
+            f"max dist to node: {dist_metrics['max_dist_to_representative_node_m']:.2f} m | "
+            f"mean-max/label: "
+            f"{dist_metrics['mean_max_dist_per_label_to_representative_node_m']:.2f} m"
         )
 
 
 if __name__ == "__main__":
-    # run_benchmark()
+    run_benchmark()
 
-    run_hac_strength_benchmark(cluster_multiplier=0.75)
+    benchmark_castile_leon_max_response_time()
+    benchmark_com_madrid_avg_distance_to_centroid()
 
-    # benchmark_castile_leon_max_response_time()
-    # benchmark_com_madrid_avg_distance_to_centroid()
+    # run_hac_strength_benchmark(cluster_multiplier=0.75)

@@ -13,8 +13,8 @@ Pipeline
    c. Mean relative wcss / time broken down by dataset-size bin.
 5. Save every aggregate table as CSV and produce matching plots.
 
-Outputs (all in output/analysis/)
-----------------------------------
+Base outputs (all in output/analysis/base/)
+--------------------------------------------
 relative_metrics.csv          – full per-run relative table
 overall_avg.csv               – aggregate 4a
 by_k_multiplier.csv           – aggregate 4b
@@ -50,6 +50,7 @@ import pandas as pd
 
 OUTPUT_DIR = Path("output")
 RESULTS_DIR = Path("output/analysis")
+BASE_RESULTS_DIR = RESULTS_DIR / "base"
 DATA_DIR = Path("data/datasets")
 HAC_STRENGTH_BENCHMARK_TYPE = "hac_strength"
 
@@ -161,11 +162,11 @@ def load_dataset_sizes() -> dict[str, int]:
 _BP_RE = re.compile(r"BP-KMeans \((\w+),\s*(\w+),\s*(\w+)\)")
 
 MATH_LABELS = {
-    "R_L": r"$R_L$",
-    "R_C": r"$R_C$",
-    "R_ERL": r"$R_{ERL}$",
-    "R_ERC": r"$R_{ERC}$",
-    "R_RL": r"$R_{RL}$",
+    "R_L": r"$M_L$",
+    "R_C": r"$M_C$",
+    "R_ERL": r"$M_{ERL}$",
+    "R_ERC": r"$M_{ERC}$",
+    "R_RL": r"$M_{RL}$",
     "I_LRI": r"$I_{LRI}$",
     "I_CRI": r"$I_{CRI}$",
     "I_ACL": r"$I_{ACL}$",
@@ -424,7 +425,7 @@ def _add_scatter_legends(
         labels.append("Pareto front")
 
     if len(legend_info.get("baseline_color_entries", [])) > 1:
-        _section("── Baseline algorithms ──")
+        _section("── Baseline Algorithms ──")
         for name, color in legend_info["baseline_color_entries"]:
             handles.append(
                 mlines.Line2D(
@@ -440,7 +441,7 @@ def _add_scatter_legends(
             labels.append(to_math_label(name))
 
     if len(legend_info.get("ranking_color_entries", [])) > 1:
-        _section("── Ranking method ──")
+        _section("── Label Selection Metric ──")
         for name, color in legend_info["ranking_color_entries"]:
             handles.append(
                 mlines.Line2D(
@@ -1341,9 +1342,12 @@ def analyze_grouping(
 
 
 SPECIAL_METRICS = [
-    ("avg_dist_to_centroid_m", "Mean distance to centroid (m)"),
-    ("max_dist_to_centroid_m", "Max distance to centroid (m)"),
-    ("mean_max_dist_per_label_m", "Mean max distance per label (m)"),
+    ("avg_dist_to_representative_node_m", "Mean distance to representative node (m)"),
+    ("max_dist_to_representative_node_m", "Max distance to representative node (m)"),
+    (
+        "mean_max_dist_per_label_to_representative_node_m",
+        "Mean max distance per label to representative node (m)",
+    ),
 ]
 
 
@@ -1684,6 +1688,7 @@ def analyze_special_metric(
     title_prefix: str,
     *,
     kpp_only: bool = False,
+    exclude_r_erc: bool = False,
     color_map: dict[str, tuple] | None = None,
     marker_map: dict[str, str] | None = None,
     fill_map: dict[str, bool] | None = None,
@@ -1710,6 +1715,11 @@ def analyze_special_metric(
             (~df_bp_parsed["algorithm"].str.startswith("BP-KMeans"))
             | (df_bp_parsed["init_algo"] == "KMEANS_PLUS_PLUS")
         ].copy()
+        if exclude_r_erc:
+            df = df[
+                (~df["algorithm"].str.startswith("BP-KMeans"))
+                | (df["label_selection_method"] != "R_ERC")
+            ].copy()
         if df.empty:
             print(f"  No KMeans++ data for dataset prefix '{dataset_prefix}'. Skipping.")
             return
@@ -1858,9 +1868,7 @@ def analyze_hac_strength_benchmark(show_titles: bool = False) -> None:
         )
 
     df["n_labels"] = df["n_labels"].fillna(df["n_clusters"] / df["k_multiplier"])
-    df["size_bin"] = [
-        assign_size_bin(n, int(k)) for n, k in zip(df["n_instances"], df["n_labels"])
-    ]
+    df["size_bin"] = [assign_size_bin(n, int(k)) for n, k in zip(df["n_instances"], df["n_labels"])]
 
     best = (
         df.groupby(["dataset", "k_multiplier"])
@@ -2001,7 +2009,7 @@ def main(
     global SHOW_TITLES
     SHOW_TITLES = show_titles
 
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    BASE_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     # 1. Load raw data
     print("Loading metadata files…")
@@ -2053,7 +2061,7 @@ def main(
         "relative_time",
     ]
     df[rel_cols].sort_values(["dataset", "k_multiplier", "algorithm", "n_init"]).to_csv(
-        RESULTS_DIR / "relative_metrics.csv", index=False
+        BASE_RESULTS_DIR / "relative_metrics.csv", index=False
     )
     print(f"  Saved relative_metrics.csv  ({len(df)} rows)")
 
@@ -2087,7 +2095,7 @@ def main(
         df,
         group_cols=alg_init,
         label_fn=alg_label,
-        save_dir=RESULTS_DIR,
+        save_dir=BASE_RESULTS_DIR,
         title_suffix="overall",
         **_ag_kwargs,
     )
@@ -2205,6 +2213,20 @@ def main(
         **_ag_kwargs,
     )
 
+    print("\nGenerating KMeans++ subset without R_ERC analysis…")
+    df_kpp_no_r_erc = df_kpp[
+        (~df_kpp["algorithm"].str.startswith("BP-KMeans"))
+        | (df_kpp["label_selection_method"] != "R_ERC")
+    ].copy()
+    analyze_grouping(
+        df_kpp_no_r_erc,
+        group_cols=["algorithm", "n_init"],
+        label_fn=alg_label,
+        save_dir=RESULTS_DIR / "kpp_only_no_r_erc",
+        title_suffix="kpp_only, excluding R_ERC",
+        **_ag_kwargs,
+    )
+
     print(f"\nAll results saved to {RESULTS_DIR}/")
 
     # -----------------------------------------------------------------------
@@ -2226,9 +2248,10 @@ def main(
     analyze_special_metric(
         dataset_prefix="com_madrid_osm_drive_nodes_split_split",
         metric_keys=SPECIAL_METRICS,
-        save_dir=RESULTS_DIR / "com_madrid_distance_metrics_kpp_only",
-        title_prefix="Community of Madrid (KMeans++ only)",
+        save_dir=RESULTS_DIR / "com_madrid_distance_metrics_kpp_only_no_r_erc",
+        title_prefix="Community of Madrid (KMeans++, excluding R_ERC)",
         kpp_only=True,
+        exclude_r_erc=True,
         color_map=color_map,
         marker_map=marker_map,
         fill_map=fill_map,
@@ -2251,9 +2274,10 @@ def main(
     analyze_special_metric(
         dataset_prefix="castile_and_leon_osm_drive_nodes",
         metric_keys=SPECIAL_METRICS,
-        save_dir=RESULTS_DIR / "castile_leon_distance_metrics_kpp_only",
-        title_prefix="Castile and León (KMeans++ only)",
+        save_dir=RESULTS_DIR / "castile_leon_distance_metrics_kpp_only_no_r_erc",
+        title_prefix="Castile and León (KMeans++, excluding R_ERC)",
         kpp_only=True,
+        exclude_r_erc=True,
         color_map=color_map,
         marker_map=marker_map,
         fill_map=fill_map,
