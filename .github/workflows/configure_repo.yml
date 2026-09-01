@@ -20,9 +20,10 @@ on:
       workflow:
         description: 'Development workflow to use'
         required: true
-        default: 'gitflow'
+        default: 'trunk'
         type: choice
         options:
+          - trunk
           - gitflow
           - github_flow
 

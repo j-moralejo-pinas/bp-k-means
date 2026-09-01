@@ -8,5 +8,6 @@
   "extraPaths": [
     "src"
   ],
-  "extends": "./pyrightconfig.local.json"
+  "venvPath": ".",
+  "venv": ".venv"
 }

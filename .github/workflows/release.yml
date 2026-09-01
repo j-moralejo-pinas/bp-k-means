@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       release_type:
-        description: 'Type of release: major, minor, or patch (default: minor)'
+        description: 'Type of release: auto, major, minor, or patch (default: auto)'
         required: false
-        default: 'minor'
+        default: 'auto'
         type: choice
         options:
+          - auto
           - major
           - minor
           - patch
@@ -19,7 +20,7 @@ permissions:
 
 jobs:
   call-reusable:
-    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/release.yml@main
+    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/release.yml@v1
     with:
-      release_type: ${{ inputs.release_type || 'minor' }}
+      release_type: ${{ inputs.release_type || 'auto' }}
     secrets: inherit

@@ -1,0 +1,79 @@
+# git-cliff ~ configuration file
+# https://git-cliff.org/docs/configuration
+
+[changelog]
+# A Tera template to be rendered as the changelog's header.
+# See https://keats.github.io/tera/docs/#introduction
+header = """
+Changelog
+=========\n
+All notable changes to this project will be documented in this file.
+
+The format is based on `Keep a Changelog <https://keepachangelog.com/en/1.0.0/>`_,
+and this project adheres to `Semantic Versioning <https://semver.org/spec/v2.0.0.html>`_.
+"""
+# A Tera template to be rendered for each release.
+body = """
+{%- macro remote_url() -%}
+  https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}
+{%- endmacro -%}
+
+{% if version -%}
+    .. `{{ version | trim_start_matches(pat="v") }}`_ - {{ timestamp | date(format="%Y-%m-%d") }}
+    {{ version | trim_start_matches(pat="v") }} - {{ timestamp | date(format="%Y-%m-%d") }}
+    -----------------------------------------------------------------------------------------
+{% else -%}
+    .. `Unreleased`_
+    Unreleased
+    ----------
+{% endif -%}
+
+{% for group, commits in commits | group_by(attribute="group") %}
+    {{ group | upper_first }}
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+    {%- for commit in commits %}
+        * {{ commit.message | split(pat="\n") | first | upper_first | trim }}\
+            {% if commit.remote.username %} by @{{ commit.remote.username }}{%- endif -%}
+            {% if commit.remote.pr_number %} in \
+            `#{{ commit.remote.pr_number }} <{{ self::remote_url() }}/pull/{{ commit.remote.pr_number }}>`_ \
+            {%- endif -%}
+    {% endfor %}
+{% endfor %}
+
+{%- if github.contributors | filter(attribute="is_first_time", value=true) | length != 0 %}
+    New Contributors
+    ^^^^^^^^^^^^^^^^
+{%- endif -%}
+
+{% for contributor in github.contributors | filter(attribute="is_first_time", value=true) %}
+  * @{{ contributor.username }} made their first contribution
+    {%- if contributor.pr_number %} in \
+      `#{{ contributor.pr_number }} <{{ self::remote_url() }}/pull/{{ contributor.pr_number }}>`_ \
+    {%- endif %}
+{%- endfor %}\n
+
+{%- if github.contributors | filter(attribute="is_first_time", value=true) | length != 0 %}{% raw %}\n{% endraw -%}{% endif %}
+
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+commit_preprocessors = [
+    { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "" },
+]
+commit_parsers = [
+    { message = "^fix", group = "Fixed" },
+    { message = "(?i)\\bfix(ed)?\\b", group = "Fixed" },
+    { message = "(?i)\\b(add(ed)?|support(ed)?)\\b", group = "Added" },
+    { message = "(?i)\\b(remove(d)?|delete(d)?|erase(d)?)\\b", group = "Removed" },
+    { message = "(?i)\\bdeprecate(d)?\\b", group = "Deprecated" },
+    { message = "(?i)\\b(change(d)?|modif(y|ied)|improve(d)?)\\b", group = "Changed" },
+    { message = "^feat", group = "Added" },
+]
+filter_commits = true
+protect_breaking_commits = true
+topo_order = true
+topo_order_commits = true
+sort_commits = "newest"

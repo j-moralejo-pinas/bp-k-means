@@ -5,11 +5,6 @@ import numpy as np
 import pandas as pd
 
 from bp_k_means.bp_kmeans import InitStrategy, RankingStrategy, bp_kmeans
-from bp_k_means.bp_k_means_optimized import bp_kmeans_optimized
-from bp_k_means.experimental_bisecting_k_means import divisive_kmeans_by_label
-from bp_k_means.experimental_bpk_means import experimental_bp_kmeans
-from bp_k_means.cop_k_means import cop_kmeans_by_class
-from bp_k_means.hac import hac_ward_by_label
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +24,6 @@ def overall_wcss(X, labels):
 
 
 def main():
-    rng = np.random.default_rng(42)
     # Load dataset
     df = pd.read_parquet("data/datasets/madrid_osm_drive_nodes.parquet")
     print(len(df))
@@ -45,7 +39,6 @@ def main():
     # -------------------------------
     start_time = time.time()
     for i in range(10):
-        labels_bp = bp_kmeans_optimized(X, y, target_k, seed=42, n_init=n_init)
         labels_bp = bp_kmeans(
             X,
             y,

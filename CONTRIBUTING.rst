@@ -27,7 +27,9 @@ Prerequisites
 - Python 3.13
 - Git
 - Docker (optional, for containerized development)
-- Conda or similar environment manager (recommended)
+- Nix or NixOS
+- direnv and nix-direnv
+- uv
 
 Fork and Clone
 --------------
@@ -43,38 +45,22 @@ Fork and Clone
 Development Setup
 =================
 
-Environment Setup
------------------
-
-1. Create a conda environment (recommended):
+Use the bootstrap script to create the development environment:
 
 .. code-block:: bash
 
-    conda create -n bp-k-means python=3.13
-    conda activate bp-k-means
+    chmod +x setup-dev.sh
+    ./setup-dev.sh
 
-2. Install the package in development mode:
+This configures direnv, creates the ``uv`` virtual environment, installs the package with
+development and documentation dependencies, and installs the pre-commit hooks.
 
-.. code-block:: bash
-
-    pip install -e .[dev,docs]
-
-This will install:
-
-- All runtime dependencies
-- Development tools (pytest, ruff, pre-commit, etc.)
-- Documentation tools (sphinx, sphinx-autoapi)
-
-Pre-commit Hooks
-----------------
-
-Set up pre-commit hooks to ensure code quality:
+To run the hooks manually:
 
 .. code-block:: bash
 
-    pre-commit install
+    pre-commit run --all-files
 
-This will automatically run code formatting and linting before each commit.
 
 Development Workflow
 ====================
@@ -176,7 +162,7 @@ We use **pyupgrade** to automatically upgrade Python syntax to use modern featur
     pyupgrade --py312-plus src/**/*.py
 
     # Upgrade specific files
-    pyupgrade --py312-plus src/bp_k_mean/specific_module.py
+    pyupgrade --py312-plus src/bp_k_means/specific_module.py
 
     # Upgrade all Python files recursively
     find src -name "*.py" -exec pyupgrade --py312-plus {} +
@@ -202,7 +188,7 @@ We use **docformatter** to automatically format docstrings:
     docformatter --check src/**/*.py
 
     # Format specific files
-    docformatter --in-place src/bp_k_mean/specific_module.py
+    docformatter --in-place src/bp_k_means/specific_module.py
 
 Docformatter ensures:
 
@@ -238,7 +224,7 @@ We use **pydoclint** to ensure docstring quality and consistency:
     pydoclint src/
 
     # Check specific files
-    pydoclint src/bp_k_mean/specific_module.py
+    pydoclint src/bp_k_means/specific_module.py
 
 Pydoclint helps ensure that:
 
@@ -258,20 +244,9 @@ We use **Pyright** for static type checking:
     pyright
 
     # Check specific files
-    pyright src/bp_k_mean/specific_module.py
+    pyright src/bp_k_means/specific_module.py
 
 Pyright is configured in ``pyrightconfig.json`` and helps catch type-related errors before runtime.
-
-**Important**: You should link your conda environment path in ``pyrightconfig.local.json`` for proper type checking. Create this file if it doesn't exist:
-
-.. code-block:: json
-
-    {
-        "venvPath": "/path/to/your/conda/envs",
-        "venv": "bp-k-means"
-    }
-
-Replace ``/path/to/your/conda/envs`` with your actual conda environments path (e.g., ``/home/username/miniconda3/envs`` or ``/home/username/micromamba/envs``).
 
 Make sure your code passes type checking before submitting a pull request.
 
@@ -315,7 +290,7 @@ Code Style Guidelines
 
 - **Line length**: 100 characters maximum
 - **Docstring style**: NumPy format
-- **Import sorting**: Follow the black profile
+- **Import sorting**: Follow Ruff's configured profile
 - **Type hints**: Use type hints for function signatures
 - **Variable naming**: Use descriptive names in snake_case
 
@@ -328,7 +303,7 @@ Example of well-formatted code:
     import numpy as np
     import pandas as pd
 
-    from bp_k_mean import fun
+    from bp_k_means import fun
 
     def calculate_statistics(data: List[float]) -> Dict[str, float]:
         """Calculate basic statistics for a list of numbers.
@@ -369,7 +344,7 @@ Running Tests
     pytest --cov=src
 
     # Run specific test file
-    pytest tests/bp_k_mean/test_specific_module.py
+    pytest tests/bp_k_means/test_specific_module.py
 
     # Run tests matching a pattern
     pytest -k "test_pattern"
@@ -391,7 +366,7 @@ Example test:
     import pytest
     import numpy as np
 
-    from bp_k_mean import fun
+    from bp_k_means import fun
 
 
     class TestFeature:
@@ -432,15 +407,15 @@ Submitting Changes
 Pull Request Process
 --------------------
 
-1. Rebase your feature branch on the latest dev branch:
+1. Rebase your feature branch on the latest main branch:
 
 .. code-block:: bash
 
     # Fetch the latest changes from upstream
     git fetch origin
 
-    # Rebase your feature branch on dev
-    git rebase origin/dev
+    # Rebase your feature branch on main
+    git rebase origin/main
 
     # If there are conflicts, resolve them and continue
     git add .
@@ -473,7 +448,7 @@ Pull Request Process
 
     git push origin feature/your-feature-name
 
-5. Create a pull request to dev on GitHub with:
+5. Create a pull request to main on GitHub with:
 
 - Reference to any related issues
 - Screenshots or examples if applicable
@@ -509,7 +484,7 @@ Understanding the codebase structure will help you contribute effectively:
 
     bp-k-means/
     ├── src/                        # Source code
-    │   ├── bp_k_mean/           # Main package
+    │   ├── bp_k_means/           # Main package
     │   └── other_package/          # Additional package
     ├── tests/                      # Test suite
     ├── docs/                       # Documentation
@@ -555,7 +530,7 @@ Use this template for any functional issues, including performance problems, cra
     - **OS**: [e.g., Ubuntu 22.04, Windows 11, macOS 13.0]
     - **Python Version**: [e.g., 3.13.y]
     - **Project Version**: [e.g., 1.0.0 or commit hash if using dev]
-    - **Conda Environment**: [e.g., bp-k-means]
+    - **Python Environment**: [e.g., .venv managed by uv]
     - **Hardware** (for performance issues): [CPU, RAM, relevant specs]
 
     ## Steps to Reproduce

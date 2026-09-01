@@ -10,5 +10,5 @@ permissions:
 
 jobs:
   call-reusable:
-    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/publish_on_tag.yml@main
+    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/publish_on_tag.yml@v1
     secrets: inherit

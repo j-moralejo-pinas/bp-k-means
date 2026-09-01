@@ -12,5 +12,5 @@ permissions:
 jobs:
   call-reusable:
     if: github.event.before != '0000000000000000000000000000000000000000'
-    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/main_push.yml@main
+    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/main_push.yml@v1
     secrets: inherit

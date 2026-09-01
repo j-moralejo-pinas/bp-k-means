@@ -15,7 +15,7 @@ usage() {
     echo "  min-python-version   : Minimum Python version (e.g., '3.11')"
     echo "  max-python-version   : Optional maximum Python version (not included, e.g., '3.12')"
     echo "  keywords             : Optional space-separated list of keywords/topics (e.g., 'python automation testing')"
-    echo "  workflow             : Optional development workflow (e.g., 'gitflow', 'github_flow')"
+    echo "  workflow             : Optional development workflow (e.g., 'trunk', 'gitflow', 'github_flow')"
     echo ""
     echo "Examples:"
     echo "  $0 'my-data-analyzer' 'A tool for analyzing data' '3.9'"
@@ -180,34 +180,30 @@ update_workflow_content() {
 
     if [[ ! -f "$workflow_file" ]]; then
         echo "  ⚠ Warning: Workflow file '$workflow_file' not found, keeping existing workflow content"
-        return 0
-    fi
-
-    if [[ ! -f "CONTRIBUTING.rst" ]]; then
+    elif [[ ! -f "CONTRIBUTING.rst" ]]; then
         echo "  ⚠ Warning: CONTRIBUTING.rst not found"
-        return 0
+    else
+        echo "  Updating workflow content with: $workflow_name (from $workflow_file)"
+
+        # Use sed to replace the <dev_workflow> token with the file content
+        # This approach reads the workflow file directly and inserts it in place of the token
+        sed -e "/<dev_workflow>/ {
+            r $workflow_file
+            d
+        }" CONTRIBUTING.rst > CONTRIBUTING.rst.tmp
+
+        # Replace the original file
+        mv CONTRIBUTING.rst.tmp CONTRIBUTING.rst
+
+        # Clean up workflow files after successful integration
+        echo "  Cleaning up workflow files..."
+        for workflow_cleanup_file in dev_workflow_*.rst; do
+            if [[ -f "$workflow_cleanup_file" ]]; then
+                rm "$workflow_cleanup_file"
+                echo "    ✓ Removed $workflow_cleanup_file"
+            fi
+        done
     fi
-
-    echo "  Updating workflow content with: $workflow_name (from $workflow_file)"
-
-    # Use sed to replace the <dev_workflow> token with the file content
-    # This approach reads the workflow file directly and inserts it in place of the token
-    sed -e "/<dev_workflow>/ {
-        r $workflow_file
-        d
-    }" CONTRIBUTING.rst > CONTRIBUTING.rst.tmp
-
-    # Replace the original file
-    mv CONTRIBUTING.rst.tmp CONTRIBUTING.rst
-
-    # Clean up workflow files after successful integration
-    echo "  Cleaning up workflow files..."
-    for workflow_cleanup_file in dev_workflow_*.rst; do
-        if [[ -f "$workflow_cleanup_file" ]]; then
-            rm "$workflow_cleanup_file"
-            echo "    ✓ Removed $workflow_cleanup_file"
-        fi
-    done
 
     # Clean up GitHub workflow files that are no longer needed
     echo "  Cleaning up GitHub workflow files for $workflow_name workflow..."
@@ -392,17 +388,9 @@ fi
 
 echo "  ✓ Directory renaming complete"
 
-# Step 7: Update setuptools_scm write_to path
+# Step 7: Handle .vscode and pyrightconfig.local.json
 echo ""
-echo "Step 7: Updating setuptools_scm configuration..."
-if [[ -f "pyproject.toml" ]]; then
-    sed -i "s|write_to = \"src/.*/|write_to = \"src/$SNAKE_CASE_NAME/|" pyproject.toml
-    echo "  ✓ setuptools_scm write_to path updated"
-fi
-
-# Step 8: Handle .vscode and pyrightconfig.local.json
-echo ""
-echo "Step 8: Handling local configuration files..."
+echo "Step 7: Handling local configuration files..."
 untrack_and_ignore ".vscode" "folder"
 untrack_and_ignore "pyrightconfig.local.json" "file"
 
@@ -422,6 +410,6 @@ echo ""
 echo "Next steps:"
 echo "  1. Review the changes made to your files and directories"
 echo "  2. Update any URLs, author information, and other project-specific details"
-echo "  3. Install dependencies: pip install -e .[dev]"
-echo "  4. Run tests: pytest"
+echo "  3. Install dependencies: uv pip install -e \".[dev,docs]\""
+echo "  4. Run tests: uv run pytest"
 echo ""

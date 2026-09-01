@@ -10,5 +10,5 @@ permissions:
 
 jobs:
   call-reusable:
-    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/tag_on_merge.yml@main
+    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/tag_on_merge.yml@v1
     secrets: inherit

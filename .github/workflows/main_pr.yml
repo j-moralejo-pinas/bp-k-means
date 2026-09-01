@@ -11,5 +11,5 @@ permissions:
 
 jobs:
   call-reusable:
-    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/main_pr.yml@main
+    uses: j-moralejo-pinas/ci-cd-python/.github/workflows/main_pr.yml@v1
     secrets: inherit
