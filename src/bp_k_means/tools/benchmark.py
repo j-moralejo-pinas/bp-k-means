@@ -20,6 +20,26 @@ from bp_k_means.utils.logging import logger
 from bp_k_means.utils.metrics import overall_wcss
 
 OUTPUT_DIR = Path("output")
+DEFAULT_K_MULTIPLIERS = (1.5, 2.0, 4.0)
+DEFAULT_N_INITS = (1, 2, 4, 8, 16, 32)
+REGULAR_BENCHMARK_DATASET_EXCLUDE_PATTERNS = ("com_madrid", "castile_and_leon")
+
+
+# Output helpers
+
+
+def _algorithm_output_dir(
+    output_dir: Path,
+    dataset_name: str,
+    alg_name: str,
+    k: int,
+    n_init: int,
+    run_name: str | None = None,
+) -> Path:
+    """Return the output directory for one benchmark run."""
+    safe_alg = re.sub(r"[^\w]", "_", alg_name).strip("_")
+    return output_dir / dataset_name / safe_alg / (run_name or f"k{k}_ninit{n_init}")
+
 
 def _compute_centroids(X: np.ndarray, labels: np.ndarray) -> pd.DataFrame:
     unique_labels = np.unique(labels)
@@ -96,11 +116,11 @@ def _save_run_outputs(
     *,
     output_dir: Path = OUTPUT_DIR,
     benchmark_type: str = "regular",
+    seed: int | None = None,
     extra_metadata: dict | None = None,
     run_name: str | None = None,
 ) -> None:
-    safe_alg = re.sub(r"[^\w]", "_", alg_name).strip("_")
-    run_dir = output_dir / dataset_name / safe_alg / (run_name or f"k{k}_ninit{n_init}")
+    run_dir = _algorithm_output_dir(output_dir, dataset_name, alg_name, k, n_init, run_name)
     run_dir.mkdir(parents=True, exist_ok=True)
 
     n_clusters = len(np.unique(labels))
@@ -127,6 +147,8 @@ def _save_run_outputs(
         "wcss_per_cluster": _wcss_stats(wcss_cluster_arr),
         "wcss_per_label": _wcss_stats(wcss_label_arr),
     }
+    if seed is not None:
+        metadata["seed"] = seed
     if extra_metadata:
         metadata.update(extra_metadata)
     with (run_dir / "metadata.json").open("w") as f:
@@ -139,76 +161,94 @@ def _save_run_outputs(
     instances_df.to_parquet(run_dir / "instances.parquet", index=False)
 
 
-def run_cop_kmeans(
-    X: np.ndarray,
-    y: np.ndarray,
-    k: int,
-    seed: int | np.random.Generator,
-    n_init: int,
-    *,
-    init_ensure_class: bool,
-) -> np.ndarray | None:
-    """Run COP-KMeans repeatedly and return the run with the lowest WCSS."""
-    try:
-        return COPKMeans(
-            seed=seed,
-            n_init=n_init,
-            init_ensure_class=init_ensure_class,
-        ).fit_predict(X, y, k)
-    except RuntimeError:
-        return None
-
-
-K_MULTIPLIERS = [1.5, 2, 4]
-N_INITS = [1, 2, 4, 8, 16, 32]
-REGULAR_BENCHMARK_DATASET_EXCLUDE_PATTERNS = ("com_madrid", "castile_and_leon")
-
-
 def _is_regular_benchmark_dataset(path: Path) -> bool:
     stem = path.stem.lower()
     return not any(pattern in stem for pattern in REGULAR_BENCHMARK_DATASET_EXCLUDE_PATTERNS)
 
 
-def _build_algorithms() -> list[tuple[str, BaseAlgo]]:
-    return [
-        *[
-            (
-                f"BP-KMeans ({ranking.name}, {init.name}, {init_algo.name})",
-                BPKMeans(
-                    seed=42,
-                    n_init=n_in,
+def _load_dataset(dataset_path: Path, label_column: str) -> tuple[np.ndarray, np.ndarray]:
+    """Load coordinates and labels from a benchmark parquet file."""
+    df = pd.read_parquet(dataset_path)
+    return df[["x_utm", "y_utm"]].to_numpy(), df[label_column].to_numpy()
+
+
+def _run_algorithm(
+    algo: BaseAlgo,
+    X: np.ndarray,
+    y: np.ndarray,
+    target_k: int,
+) -> tuple[np.ndarray | None, float]:
+    """Run one algorithm and return its labels and elapsed time."""
+    start_time = time.perf_counter()
+    try:
+        labels = algo.fit_predict(X, y, target_k)
+    except RuntimeError:
+        labels = None
+    return labels, time.perf_counter() - start_time
+
+
+def _update_metadata(metadata_path: Path, updates: dict) -> None:
+    """Update a saved run's metadata in place."""
+    with metadata_path.open() as metadata_file:
+        metadata = json.load(metadata_file)
+    metadata.update(updates)
+    with metadata_path.open("w") as metadata_file:
+        json.dump(metadata, metadata_file, indent=2)
+
+
+# Algorithm factory
+
+
+def _build_algorithms(
+    *,
+    seed: int = 42,
+    n_inits: list[int] | tuple[int, ...] = DEFAULT_N_INITS,
+    subsample_size: int = 10,
+    include_cop_kmeans: bool = False,
+) -> list[tuple[str, BaseAlgo]]:
+    """Build the algorithms used by the benchmark suite."""
+    algorithms: list[tuple[str, BaseAlgo]] = []
+
+    for ranking in RankingStrategy:
+        for init in InitStrategy:
+            for n_init in n_inits:
+                name = f"BP-KMeans ({ranking.name}, {init.name}, KMEANS_PLUS_PLUS)"
+                algorithm = BPKMeans(
+                    seed=seed,
+                    n_init=n_init,
                     ranking_strategy=ranking,
                     init_strategy=init,
-                    init_algorithm=init_algo,
-                    subsample_size=10,
-                ),
-            )
-            for init_algo in [InitAlgorithm.KMEANS_PLUS_PLUS]  # , InitAlgorithm.RANDOM_SAMPLING]
-            for ranking in RankingStrategy
-            for init in InitStrategy
-            for n_in in N_INITS
-        ],
-        *[
-            (
-                "Bisecting KMeans",
-                BisectingKMeansNoRefine(seed=42, n_init=n_in),
-            )
-            for n_in in N_INITS
-        ],
-        *[
+                    init_algorithm=InitAlgorithm.KMEANS_PLUS_PLUS,
+                    subsample_size=subsample_size,
+                )
+                algorithms.append((name, algorithm))
+
+    for n_init in n_inits:
+        if include_cop_kmeans:
+            algorithms.append(("COP-KMeans", COPKMeans(seed=seed, n_init=n_init)))
+        algorithms.append(("Bisecting KMeans", BisectingKMeansNoRefine(seed=seed, n_init=n_init)))
+        algorithms.append(
             (
                 "Bisecting KMeans (R_RL)",
-                PrecomputedBisectingKMeansNoRefine(seed=42, n_init=n_in),
+                PrecomputedBisectingKMeansNoRefine(seed=seed, n_init=n_init),
             )
-            for n_in in N_INITS
-        ],
-        ("HAC Ward (NNC)", HACWardNNC(seed=42)),
-    ]
+        )
+
+    algorithms.append(("HAC Ward (NNC)", HACWardNNC(seed=seed)))
+    return algorithms
 
 
-def run_benchmark() -> None:
+def run_benchmark(
+    datasets_dir: Path = Path("data/datasets"),
+    output_dir: Path = OUTPUT_DIR,
+    *,
+    seed: int = 42,
+    k_multipliers: list[float] | tuple[float, ...] = DEFAULT_K_MULTIPLIERS,
+    n_inits: list[int] | tuple[int, ...] = DEFAULT_N_INITS,
+    subsample_size: int = 10,
+    include_cop_kmeans: bool = False,
+) -> None:
     """Run the regular benchmark suite for all available datasets."""
-    datasets_dir = Path("data/datasets")
     dataset_files = list(datasets_dir.glob("*nodes.parquet"))
     dataset_files = [f for f in dataset_files if _is_regular_benchmark_dataset(f)]
 
@@ -216,14 +256,17 @@ def run_benchmark() -> None:
         logger.error("No parquet files found in %s", datasets_dir)
         return
 
-    algorithms = _build_algorithms()
+    algorithms = _build_algorithms(
+        seed=seed,
+        n_inits=n_inits,
+        subsample_size=subsample_size,
+        include_cop_kmeans=include_cop_kmeans,
+    )
 
     for dataset_path in dataset_files:
         logger.info("Loading dataset: %s", dataset_path.name)
         try:
-            df = pd.read_parquet(dataset_path)
-            X = df[["x_utm", "y_utm"]].to_numpy()
-            y = df["CUSEC"].to_numpy()
+            X, y = _load_dataset(dataset_path, "CUSEC")
 
             n_instances = len(X)
             n_labels = len(np.unique(y))
@@ -233,7 +276,7 @@ def run_benchmark() -> None:
 
         logger.info("  Instances: %s, Labels: %s", n_instances, n_labels)
 
-        for k_mult in K_MULTIPLIERS:
+        for k_mult in k_multipliers:
             target_k = int(n_labels * k_mult)
 
             if target_k > n_instances:
@@ -255,11 +298,7 @@ def run_benchmark() -> None:
                     n_init,
                 )
 
-                start_time = time.time()
-
-                labels = algo.fit_predict(X, y, target_k)
-                end_time = time.time()
-                duration = end_time - start_time
+                labels, duration = _run_algorithm(algo, X, y, target_k)
 
                 if labels is None:
                     logger.error("    %s failed to produce labels.", alg_name)
@@ -279,6 +318,8 @@ def run_benchmark() -> None:
                         labels=labels,
                         duration=duration,
                         wcss=wcss,
+                        output_dir=output_dir,
+                        seed=seed,
                     )
 
                 logger.info(
@@ -289,7 +330,16 @@ def run_benchmark() -> None:
                 )
 
 
-def run_hac_strength_benchmark(cluster_multiplier: float = 1.5) -> None:
+def run_hac_strength_benchmark(
+    cluster_multiplier: float = 1.5,
+    datasets_dir: Path = Path("data/datasets"),
+    output_dir: Path = OUTPUT_DIR,
+    *,
+    seed: int = 42,
+    n_inits: list[int] | tuple[int, ...] = DEFAULT_N_INITS,
+    subsample_size: int = 10,
+    include_cop_kmeans: bool = False,
+) -> None:
     """
     Run the HAC-strength benchmark.
 
@@ -302,23 +352,25 @@ def run_hac_strength_benchmark(cluster_multiplier: float = 1.5) -> None:
         msg = "cluster_multiplier must be positive"
         raise ValueError(msg)
 
-    datasets_dir = Path("data/datasets")
     dataset_files = list(datasets_dir.glob("*nodes.parquet"))
 
     if not dataset_files:
         logger.error("No parquet files found in %s", datasets_dir)
         return
 
-    algorithms = _build_algorithms()
-    output_dir = OUTPUT_DIR / "hac_strength"
+    algorithms = _build_algorithms(
+        seed=seed,
+        n_inits=n_inits,
+        subsample_size=subsample_size,
+        include_cop_kmeans=include_cop_kmeans,
+    )
+    output_dir = output_dir / "hac_strength"
     safe_multiplier = str(cluster_multiplier).replace(".", "_")
 
     for dataset_path in dataset_files:
         logger.info("Loading dataset: %s", dataset_path.name)
         try:
-            df = pd.read_parquet(dataset_path)
-            X = df[["x_utm", "y_utm"]].to_numpy()
-            y = df["CUSEC"].to_numpy()
+            X, y = _load_dataset(dataset_path, "CUSEC")
 
             n_instances = len(X)
             n_labels = len(np.unique(y))
@@ -356,9 +408,18 @@ def run_hac_strength_benchmark(cluster_multiplier: float = 1.5) -> None:
 
         for alg_name, algo in algorithms:
             n_init = algo.n_init
-            safe_alg = re.sub(r"[^\w]", "_", alg_name).strip("_")
             run_name = f"nodesx{safe_multiplier}_k{target_k}_ninit{n_init}"
-            meta_path = output_dir / dataset_path.stem / safe_alg / run_name / "metadata.json"
+            meta_path = (
+                _algorithm_output_dir(
+                    output_dir,
+                    dataset_path.stem,
+                    alg_name,
+                    target_k,
+                    n_init,
+                    run_name,
+                )
+                / "metadata.json"
+            )
             if meta_path.exists():
                 logger.info(
                     "  Skipping %s | k=%s (x%s nodes) | n_init=%s; output already exists.",
@@ -377,9 +438,7 @@ def run_hac_strength_benchmark(cluster_multiplier: float = 1.5) -> None:
                 n_init,
             )
 
-            start_time = time.time()
-            labels = algo.fit_predict(X, y, target_k)
-            duration = time.time() - start_time
+            labels, duration = _run_algorithm(algo, X, y, target_k)
 
             if labels is None:
                 logger.error("    %s failed to produce labels.", alg_name)
@@ -401,6 +460,7 @@ def run_hac_strength_benchmark(cluster_multiplier: float = 1.5) -> None:
                     wcss=wcss,
                     output_dir=output_dir,
                     benchmark_type="hac_strength",
+                    seed=seed,
                     run_name=run_name,
                     extra_metadata={
                         "cluster_multiplier_basis": "nodes",
@@ -458,28 +518,37 @@ def _compute_distance_metrics(X: np.ndarray, labels: np.ndarray, y: np.ndarray) 
     }
 
 
-def benchmark_com_madrid_avg_distance_to_centroid() -> None:
+def benchmark_com_madrid_avg_distance_to_centroid(
+    datasets_dir: Path = Path("data/datasets"),
+    output_dir: Path = OUTPUT_DIR,
+    *,
+    seed: int = 42,
+    n_inits: list[int] | tuple[int, ...] = DEFAULT_N_INITS,
+    subsample_size: int = 10,
+    include_cop_kmeans: bool = False,
+) -> None:
     """Benchmark average distance to centroid at k=10000 for Community of Madrid."""
-    dataset_path = Path("data/datasets") / "com_madrid_osm_drive_nodes_split_split.parquet"
+    dataset_path = datasets_dir / "com_madrid_osm_drive_nodes_split_split.parquet"
     if not dataset_path.exists():
         logger.error("Dataset not found: %s", dataset_path)
         return
 
     logger.info("Loading %s", dataset_path.name)
-    df = pd.read_parquet(dataset_path)
-    X = df[["x_utm", "y_utm"]].to_numpy()
-    y = df["CUSEC"].to_numpy()
+    X, y = _load_dataset(dataset_path, "CUSEC")
     target_k = 10000
     logger.info("  Instances: %s | k=%s", len(X), target_k)
 
-    algorithms = _build_algorithms()
+    algorithms = _build_algorithms(
+        seed=seed,
+        n_inits=n_inits,
+        subsample_size=subsample_size,
+        include_cop_kmeans=include_cop_kmeans,
+    )
 
     for alg_name, algo in algorithms:
         n_init = algo.n_init
         logger.info("  Running %s | k=%s | n_init=%s", alg_name, target_k, n_init)
-        start_time = time.time()
-        labels = algo.fit_predict(X, y, target_k)
-        duration = time.time() - start_time
+        labels, duration = _run_algorithm(algo, X, y, target_k)
 
         if labels is None:
             logger.error("    %s failed to produce labels.", alg_name)
@@ -497,23 +566,17 @@ def benchmark_com_madrid_avg_distance_to_centroid() -> None:
             labels=labels,
             duration=duration,
             wcss=wcss,
+            output_dir=output_dir,
+            seed=seed,
         )
 
         dist_metrics = _compute_distance_metrics(X, labels, y)
 
-        safe_alg = re.sub(r"[^\w]", "_", alg_name).strip("_")
         meta_path = (
-            OUTPUT_DIR
-            / dataset_path.stem
-            / safe_alg
-            / f"k{target_k}_ninit{n_init}"
+            _algorithm_output_dir(output_dir, dataset_path.stem, alg_name, target_k, n_init)
             / "metadata.json"
         )
-        with meta_path.open() as f:
-            meta = json.load(f)
-        meta.update(dist_metrics)
-        with meta_path.open("w") as f:
-            json.dump(meta, f, indent=2)
+        _update_metadata(meta_path, dist_metrics)
 
         logger.info(
             "    -> avg dist to node: %.2f m | max dist to node: %.2f m | "
@@ -526,17 +589,23 @@ def benchmark_com_madrid_avg_distance_to_centroid() -> None:
         )
 
 
-def benchmark_castile_leon_max_response_time() -> None:
+def benchmark_castile_leon_max_response_time(
+    datasets_dir: Path = Path("data/datasets"),
+    output_dir: Path = OUTPUT_DIR,
+    *,
+    seed: int = 42,
+    n_inits: list[int] | tuple[int, ...] = DEFAULT_N_INITS,
+    subsample_size: int = 10,
+    include_cop_kmeans: bool = False,
+) -> None:
     """Benchmark: maximum response time at k=200 using province labels (Castile and León)."""
-    dataset_path = Path("data/datasets") / "castile_and_leon_osm_drive_nodes.parquet"
+    dataset_path = datasets_dir / "castile_and_leon_osm_drive_nodes.parquet"
     if not dataset_path.exists():
         logger.error("Dataset not found: %s", dataset_path)
         return
 
     logger.info("Loading %s", dataset_path.name)
-    df = pd.read_parquet(dataset_path)
-    X = df[["x_utm", "y_utm"]].to_numpy()
-    y = df["CPRO"].to_numpy()  # province labels
+    X, y = _load_dataset(dataset_path, "CPRO")
     target_k = 200
     logger.info(
         "  Instances: %s | unique provinces: %s | k=%s",
@@ -549,15 +618,18 @@ def benchmark_castile_leon_max_response_time() -> None:
         logger.error("k=%s exceeds n_instances=%s. Aborting.", target_k, len(X))
         return
 
-    algorithms = _build_algorithms()
+    algorithms = _build_algorithms(
+        seed=seed,
+        n_inits=n_inits,
+        subsample_size=subsample_size,
+        include_cop_kmeans=include_cop_kmeans,
+    )
 
     for alg_name, algo in algorithms:
         n_init = algo.n_init
         # only benchmark n_init=8 for max response time
         logger.info("  Running %s | k=%s | n_init=%s", alg_name, target_k, n_init)
-        t0 = time.time()
-        labels = algo.fit_predict(X, y, target_k)
-        duration = time.time() - t0
+        labels, duration = _run_algorithm(algo, X, y, target_k)
 
         if labels is None:
             logger.error("    %s failed to produce labels.", alg_name)
@@ -575,24 +647,17 @@ def benchmark_castile_leon_max_response_time() -> None:
             labels=labels,
             duration=duration,
             wcss=wcss,
+            output_dir=output_dir,
+            seed=seed,
         )
 
         dist_metrics = _compute_distance_metrics(X, labels, y)
 
-        safe_alg = re.sub(r"[^\w]", "_", alg_name).strip("_")
         meta_path = (
-            OUTPUT_DIR
-            / dataset_path.stem
-            / safe_alg
-            / f"k{target_k}_ninit{n_init}"
+            _algorithm_output_dir(output_dir, dataset_path.stem, alg_name, target_k, n_init)
             / "metadata.json"
         )
-        with meta_path.open() as f:
-            meta = json.load(f)
-        meta["response_time_s"] = duration
-        meta.update(dist_metrics)
-        with meta_path.open("w") as f:
-            json.dump(meta, f, indent=2)
+        _update_metadata(meta_path, {"response_time_s": duration, **dist_metrics})
 
         logger.info(
             "    -> time: %.4fs | avg dist to node: %.2f m | "
@@ -602,12 +667,3 @@ def benchmark_castile_leon_max_response_time() -> None:
             dist_metrics["max_dist_to_representative_node_m"],
             dist_metrics["mean_max_dist_per_label_to_representative_node_m"],
         )
-
-
-if __name__ == "__main__":
-    run_benchmark()
-
-    benchmark_castile_leon_max_response_time()
-    benchmark_com_madrid_avg_distance_to_centroid()
-
-    # run_hac_strength_benchmark(cluster_multiplier=0.75)

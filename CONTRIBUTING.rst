@@ -4,8 +4,8 @@ Contributing
 
 We welcome contributions to the bp-k-means project! This guide will help you get started with contributing to the project.
 
-📋 Table of Contents
-===================
+Table of Contents
+=================
 
 1. `Getting Started`_
 2. `Development Setup`_
@@ -380,7 +380,7 @@ Example test:
 Documentation
 =============
 
-We use **Sphinx** with **autoapi** for documentation generation.
+We use **Sphinx** with **AutoAPI** for documentation generation.
 
 Building Documentation
 ----------------------

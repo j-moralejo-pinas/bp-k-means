@@ -18,7 +18,16 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 requires-python = ">=3.13"
-dependencies = ["numpy", "pyarrow", "osmnx"]
+dependencies = [
+    "geopandas",
+    "matplotlib",
+    "networkx",
+    "numpy",
+    "osmnx",
+    "pandas",
+    "pyarrow",
+    "requests",
+]
 
 [project.urls]
 Homepage = "https://github.com/j-moralejo-pinas/bp-k-means"
@@ -26,6 +35,10 @@ Changelog = "https://bp-k-means.readthedocs.io/en/latest/CHANGELOG.html"
 Source = "https://github.com/j-moralejo-pinas/bp-k-means"
 Documentation = "https://bp-k-means.readthedocs.io/"
 Tracker = "https://github.com/j-moralejo-pinas/bp-k-means/issues"
+
+[project.scripts]
+bp-k-means-benchmark = "bp_k_means.main:main"
+bp-k-means-analyze = "bp_k_means.tools.analyze_benchmark:cli"
 
 
 [tool.hatch.version]
@@ -46,7 +59,6 @@ dev = [
     "ruff",
     "pydoclint",
     "docformatter",
-    "pytest",
     "pytest-cov",
     "pyupgrade",
     "py-spy",

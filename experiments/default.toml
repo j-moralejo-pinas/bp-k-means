@@ -1,0 +1,15 @@
+# Reproduction configuration for the benchmark suite.
+# Paths are resolved relative to this file.
+
+[benchmark]
+datasets_dir = "../data/datasets"
+output_dir = "../output"
+seed = 42
+k_multipliers = [1.5, 2.0, 4.0]
+n_inits = [1, 2, 4, 8, 16, 32]
+subsample_size = 10
+run_regular = true
+run_hac_strength = false
+hac_strength_multiplier = 1.5
+run_special = true
+include_cop_kmeans = false

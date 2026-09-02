@@ -2,7 +2,7 @@
 bp-k-means
 =============
 
-This is the documentation of **bp-k-means project**.
+Documentation for the **bp-k-means** label-constrained clustering package.
 
 Contents
 ========

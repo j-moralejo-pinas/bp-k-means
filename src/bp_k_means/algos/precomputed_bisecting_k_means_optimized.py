@@ -25,11 +25,11 @@ def precomputed_bisecting_kmeans_by_label_optimized(  # noqa: C901 - candidate o
     Bisecting K-Means with label constraint and precomputed splits (Refine Cluster strategy).
 
     In this version (Refine Cluster):
+
     - We maintain the clustering state for each class label.
     - We precompute the effect of splitting one more cluster for each class.
     - Since we have the whole class data, we can re-run k-means on the whole class with k+1
-      centroids
-      (seeded from previous centroids + split of the worst cluster).
+      centroids (seeded from previous centroids + split of the worst cluster).
     - The heap stores the ACTUAL reduction in WCSS for the entire class if we increment k by 1.
     """
     rng = np.random.default_rng(seed)

@@ -23,7 +23,7 @@ repos:
     args: ['--fix=auto']  # replace 'auto' with 'lf' to enforce Linux/Mac line endings or 'crlf' for Windows
   - id: name-tests-test
     args: ['--pytest-test-first']
-    files: ^tests/bp_k_mean/.*\.py
+    files: ^tests/bp_k_means/.*\.py
   - id: pretty-format-json
     args: ['--autofix', '--no-ensure-ascii', '--no-sort-keys']
   - id: requirements-txt-fixer
