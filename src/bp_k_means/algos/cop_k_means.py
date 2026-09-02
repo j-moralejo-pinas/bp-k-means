@@ -11,6 +11,7 @@ from bp_k_means.utils.logging import logger
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+
 def _assign_points(
     X: "NDArray",
     y: "NDArray",

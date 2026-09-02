@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 MIN_SPLIT_POINTS = 2
 
+
 def precomputed_bisecting_kmeans_by_label_optimized(  # noqa: C901 - candidate orchestration
     X: "NDArray",
     y: "NDArray",

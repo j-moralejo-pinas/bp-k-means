@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 MIN_SPLIT_POINTS = 2
 
+
 def _refine_cluster_split(
     pts: "NDArray",
     cluster_pts: "NDArray",

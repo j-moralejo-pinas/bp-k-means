@@ -7,6 +7,7 @@ from bp_k_means.algos.base_algo import BaseAlgo
 
 Array = NDArray
 
+
 def kmeans_plus_plus_init(
     X: Array,
     k: int,
