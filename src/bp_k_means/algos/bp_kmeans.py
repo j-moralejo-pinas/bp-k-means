@@ -23,6 +23,7 @@ from bp_k_means.utils.logging import logger
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+
 class RankingStrategy(Enum):
     """
     Ranking strategies for label selection.
