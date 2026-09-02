@@ -1,7 +1,6 @@
 """Benchmark runners and output helpers for the clustering algorithms."""
 
 import json
-import logging
 import re
 import time
 from pathlib import Path
@@ -17,10 +16,8 @@ from bp_k_means.algos.hac import HACWardNNC
 from bp_k_means.algos.precomputed_bisecting_k_means_optimized import (
     PrecomputedBisectingKMeansNoRefine,
 )
+from bp_k_means.utils.logging import logger
 from bp_k_means.utils.metrics import overall_wcss
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
 
 OUTPUT_DIR = Path("output")
 
@@ -230,7 +227,7 @@ def run_benchmark() -> None:
 
             n_instances = len(X)
             n_labels = len(np.unique(y))
-        except Exception:
+        except Exception:  # noqa: BLE001 - keep processing the remaining datasets
             logger.exception("Failed to process dataset %s", dataset_path.name)
             continue
 
@@ -325,7 +322,7 @@ def run_hac_strength_benchmark(cluster_multiplier: float = 1.5) -> None:
 
             n_instances = len(X)
             n_labels = len(np.unique(y))
-        except Exception:
+        except Exception:  # noqa: BLE001 - keep processing the remaining datasets
             logger.exception("Failed to process dataset %s", dataset_path.name)
             continue
 

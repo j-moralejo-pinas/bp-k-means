@@ -1,7 +1,6 @@
 """Bisecting k-means variants that cache split candidates per label."""
 
 import heapq
-import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -13,7 +12,6 @@ from bp_k_means.algos.k_means import kmeans, kmeans_plus_plus_init
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-logger = logging.getLogger(__name__)
 MIN_SPLIT_POINTS = 2
 
 def precomputed_bisecting_kmeans_by_label_optimized(  # noqa: C901 - candidate orchestration

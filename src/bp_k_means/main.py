@@ -1,14 +1,12 @@
 """Command-line entry point for running a BP-KMeans benchmark."""
 
-import logging
 import time
 
 import pandas as pd
 
 from bp_k_means.algos.bp_kmeans import InitStrategy, RankingStrategy, bp_kmeans
+from bp_k_means.utils.logging import logger
 from bp_k_means.utils.metrics import overall_wcss
-
-logger = logging.getLogger(__name__)
 
 
 def main() -> None:
@@ -49,5 +47,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     main()

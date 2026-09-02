@@ -1,17 +1,15 @@
 """COP-KMeans implementation with cannot-link constraints between classes."""
 
-import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import ArrayLike
 
 from bp_k_means.algos.base_algo import BaseAlgo
+from bp_k_means.utils.logging import logger
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-
-logger = logging.getLogger(__name__)
 
 def _assign_points(
     X: "NDArray",

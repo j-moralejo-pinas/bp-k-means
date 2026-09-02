@@ -38,7 +38,6 @@ special/*/*_time_comparison.png
 import argparse
 import colorsys
 import json
-import logging
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -51,6 +50,8 @@ import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
+
+from bp_k_means.utils.logging import logger
 
 OUTPUT_DIR = Path("output")
 RESULTS_DIR = Path("output/analysis")
@@ -96,7 +97,6 @@ def assign_size_bin(n_instances: float, n_labels: int) -> str:
 # Set to True to exclude HAC Ward runs from all analyses and plots
 EXCLUDE_HAC = True
 PLOT_OPTIONS = {"show_titles": False}
-logger = logging.getLogger(__name__)
 
 
 def _set_title(ax: Any, title: str | None, *, force: bool = False) -> None:

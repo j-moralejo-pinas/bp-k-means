@@ -1,6 +1,5 @@
 """Download, transform, and persist network clustering datasets."""
 
-import logging
 import math
 import zipfile
 from pathlib import Path
@@ -13,14 +12,14 @@ import osmnx as ox
 import pandas as pd
 import requests
 
+from bp_k_means.utils.logging import logger
+
 INE_ZIP_URL = "https://www.ine.es/prodyser/cartografia/seccionado_2025.zip"
 INE_POPULATION_CSV_URL = "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/69213.csv"
 DATA_DIR = Path("data/downloads")
 TARGET_CRS = "EPSG:25830"  # ETRS89 / UTM 30N
 OUTPUT_DIR = Path("data/datasets")
 MAX_EDGE_LENGTH_M = 100
-logger = logging.getLogger(__name__)
-
 # Columns typically present in SECC_CE_20250101.shp
 SECC_ATTRIBUTE_COLS = [
     "CUSEC",  # census section id
@@ -43,6 +42,7 @@ SECC_ATTRIBUTE_COLS = [
 
 # From smallest to largest region
 LEVEL_PRIORITY = ["CUSEC", "CUMUN", "CMUN", "CPRO", "CCA"]
+
 
 def ensure_dirs() -> None:
     """Create the local directories used for downloaded and generated data."""
@@ -682,7 +682,6 @@ def build_population_dataset(
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     # Example: Madrid municipality
     # Adjust codes if needed after inspecting the seccionado file.
 
@@ -848,30 +847,4 @@ if __name__ == "__main__":
     #         "CPRO": "08",
     #         "CMUN": "019",
     #     },
-    # )
-
-    # build_population_dataset(
-    #     place="Madrid, Spain",
-    #     population_file=download_population_csv(),
-    #     outfile="madrid_population_gaussian.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "28",  # province Madrid
-    #         "CMUN": "079",  # municipality Madrid
-    #     },
-    #     gaussian_std_m=100.0,
-    #     random_seed=42,
-    # )
-
-    # build_population_dataset(
-    #     place="Ajalvir, Madrid, Spain",
-    #     population_file=download_population_csv(),
-    #     outfile="ajalvir_population_gaussian.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "28",  # province Madrid
-    #         "CMUN": "002",  # municipality Ajalvir
-    #     },
-    #     gaussian_std_m=100.0,
-    #     random_seed=42,
     # )

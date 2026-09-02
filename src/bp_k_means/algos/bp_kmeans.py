@@ -5,7 +5,6 @@ The module exposes configurable ranking and initialization strategies.
 """
 
 import heapq
-import logging
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -19,11 +18,10 @@ from bp_k_means.algos.k_means import (
     random_init,
     subsampled_kmeans_plus_plus_init,
 )
+from bp_k_means.utils.logging import logger
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-
-logger = logging.getLogger(__name__)
 
 class RankingStrategy(Enum):
     """
