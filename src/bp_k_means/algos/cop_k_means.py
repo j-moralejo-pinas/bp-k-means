@@ -1,4 +1,4 @@
-"""COP-KMeans implementation with cannot-link constraints between classes."""
+"""COP-KMeans implementation with cannot-link constraints between labels."""
 
 from typing import TYPE_CHECKING
 
@@ -31,7 +31,7 @@ def _assign_points(
             break
         else:
             logger.warning(
-                "No feasible cluster for point %s. Class: %s. COP-KMeans fails.",
+                "No feasible cluster for point %s. Label: %s. COP-KMeans fails.",
                 idx,
                 y[idx],
             )
@@ -55,41 +55,41 @@ def _update_centroids(
     return new_centroids
 
 
-def cop_kmeans_by_class(
+def cop_kmeans_by_label(
     X: "NDArray",
     y: "NDArray",
     k: int,
     max_iter: int = 300,
     seed: int | np.random.Generator = 42,
     *,
-    init_ensure_class: bool = True,
+    init_ensure_label: bool = True,
 ) -> tuple["NDArray", "NDArray"] | tuple[None, None]:
     """
-    Cluster points while enforcing cannot-link constraints between classes.
+    Cluster points while enforcing cannot-link constraints between labels.
 
     X: array (n, d)
-    y: class labels, integer or string
+    y: labels, integer or string
     k: number of clusters
-    init_ensure_class: if True, ensures at least one centroid per class.
+    init_ensure_label: if True, ensures at least one centroid per label.
     """
     X = np.asarray(X)
     y = np.asarray(y)
     rng = np.random.default_rng(seed)
     n, _d = X.shape
 
-    # Map classes to indices for speed
-    classes = np.unique(y)
+    # Map labels to indices for speed
+    labels = np.unique(y)
 
-    if k < len(classes):
-        msg = "Infeasible: k is smaller than the number of classes."
+    if k < len(labels):
+        msg = "Infeasible: k is smaller than the number of labels."
         raise ValueError(msg)
 
-    if init_ensure_class:
-        # Initialize centroids: ensure at least one centroid per class
+    if init_ensure_label:
+        # Initialize centroids: ensure at least one centroid per label
         initial_indices = []
-        for cls in classes:
-            indices_in_class = np.where(y == cls)[0]
-            chosen = rng.choice(indices_in_class)
+        for label in labels:
+            indices_in_label = np.where(y == label)[0]
+            chosen = rng.choice(indices_in_label)
             initial_indices.append(chosen)
 
         remaining_count = k - len(initial_indices)
@@ -133,7 +133,7 @@ class COPKMeans(BaseAlgo):
         seed: int | np.random.Generator = 42,
         n_init: int = 10,
         *,
-        init_ensure_class: bool = True,
+        init_ensure_label: bool = True,
     ) -> None:
         """Initialize COP-KMeans.
 
@@ -145,12 +145,12 @@ class COPKMeans(BaseAlgo):
             Seed or random generator used by the algorithm.
         n_init : int
             Number of independent initializations.
-        init_ensure_class : bool
-            Whether initialization must include one centroid per class.
+        init_ensure_label : bool
+            Whether initialization must include one centroid per label.
         """
         super().__init__(seed=seed, n_init=n_init)
         self.max_iter = max_iter
-        self.init_ensure_class = init_ensure_class
+        self.init_ensure_label = init_ensure_label
 
     def fit(
         self,
@@ -165,7 +165,7 @@ class COPKMeans(BaseAlgo):
         X : ArrayLike
             Feature matrix.
         y : ArrayLike | None
-            Class labels used by the cannot-link constraint.
+            Labels used by the cannot-link constraint.
         target_k : int
             Requested number of clusters.
 
@@ -194,13 +194,13 @@ class COPKMeans(BaseAlgo):
 
         for _ in range(self.n_init):
             current_seed = rng.integers(2**32)
-            labels, centroids = cop_kmeans_by_class(
+            labels, centroids = cop_kmeans_by_label(
                 X_array,
                 y_array,
                 target_k,
                 max_iter=self.max_iter,
                 seed=current_seed,
-                init_ensure_class=self.init_ensure_class,
+                init_ensure_label=self.init_ensure_label,
             )
             if labels is None or centroids is None:
                 continue

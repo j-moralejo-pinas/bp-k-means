@@ -10,7 +10,7 @@ import pandas as pd
 
 from bp_k_means.algos.base_algo import BaseAlgo
 from bp_k_means.algos.bisecting_k_means_optimized import BisectingKMeansNoRefine
-from bp_k_means.algos.bp_kmeans import BPKMeans, InitAlgorithm, InitStrategy, RankingStrategy
+from bp_k_means.algos.bp_kmeans import BPKMeans, InitAlgorithm, InitStrategy, RankingMetric
 from bp_k_means.algos.cop_k_means import COPKMeans
 from bp_k_means.algos.hac import HACWardNNC
 from bp_k_means.algos.precomputed_bisecting_k_means_optimized import (
@@ -154,9 +154,9 @@ def _save_run_outputs(
     with (run_dir / "metadata.json").open("w") as f:
         json.dump(metadata, f, indent=2)
 
-    # instances.parquet  — coordinates + original class label + cluster assignment
+    # instances.parquet  — coordinates + original label + cluster assignment
     instances_df = pd.DataFrame(X, columns=pd.Index(["x_utm", "y_utm"]))
-    instances_df["class_label"] = y
+    instances_df["label"] = y
     instances_df["cluster"] = labels
     instances_df.to_parquet(run_dir / "instances.parquet", index=False)
 
@@ -209,14 +209,14 @@ def _build_algorithms(
     """Build the algorithms used by the benchmark suite."""
     algorithms: list[tuple[str, BaseAlgo]] = []
 
-    for ranking in RankingStrategy:
+    for ranking_metric in RankingMetric:
         for init in InitStrategy:
             for n_init in n_inits:
-                name = f"BP-KMeans ({ranking.name}, {init.name}, KMEANS_PLUS_PLUS)"
+                name = f"BP-KMeans ({ranking_metric.name}, {init.name}, KMEANS_PLUS_PLUS)"
                 algorithm = BPKMeans(
                     seed=seed,
                     n_init=n_init,
-                    ranking_strategy=ranking,
+                    ranking_metric=ranking_metric,
                     init_strategy=init,
                     init_algorithm=InitAlgorithm.KMEANS_PLUS_PLUS,
                     subsample_size=subsample_size,

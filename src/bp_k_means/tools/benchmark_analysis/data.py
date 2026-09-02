@@ -117,8 +117,8 @@ def parse_algorithm_components(df: pd.DataFrame) -> pd.DataFrame:
     """Add the three BP-KMeans component columns."""
     result = df.copy()
     parsed = result["algorithm"].str.extract(BP_ALGORITHM_PATTERN)
-    result["label_selection_method"] = parsed[0]
-    result["reinit_method"] = parsed[1]
+    result["ranking_metric"] = parsed[0]
+    result["init_strategy"] = parsed[1]
     result["init_algo"] = parsed[2]
     return result
 

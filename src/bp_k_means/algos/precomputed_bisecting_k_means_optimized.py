@@ -26,11 +26,12 @@ def precomputed_bisecting_kmeans_by_label_optimized(  # noqa: C901 - candidate o
 
     In this version (Refine Cluster):
 
-    - We maintain the clustering state for each class label.
-    - We precompute the effect of splitting one more cluster for each class.
-    - Since we have the whole class data, we can re-run k-means on the whole class with k+1
+        - We maintain the clustering state for each label.
+        - We precompute the effect of splitting one more cluster for each label.
+        - Since we have the whole label group, we can re-run k-means on the whole group with k+1
       centroids (seeded from previous centroids + split of the worst cluster).
-    - The heap stores the ACTUAL reduction in WCSS for the entire class if we increment k by 1.
+        - The heap stores the ACTUAL reduction in WCSS for the entire label group
+            if we increment k by 1.
     """
     rng = np.random.default_rng(seed)
     X = np.asarray(X)
@@ -65,7 +66,7 @@ def precomputed_bisecting_kmeans_by_label_optimized(  # noqa: C901 - candidate o
 
     # State per label
     centroids_per_label: dict[int, NDArray] = {}
-    local_labels_per_label: dict[int, NDArray] = {}
+    cluster_labels_per_label: dict[int, NDArray] = {}
     wcss_per_label: dict[int, float] = {}
     X2_per_label: dict[int, NDArray] = {}
     sum_X2_per_label: dict[int, float] = {}
@@ -99,13 +100,13 @@ def precomputed_bisecting_kmeans_by_label_optimized(  # noqa: C901 - candidate o
             wcss = sum_X2 - pts.shape[0] * (centroid[0] @ centroid[0])
 
         centroids_per_label[lbl_idx] = centroid
-        local_labels_per_label[lbl_idx] = np.zeros(pts.shape[0], dtype=int)
+        cluster_labels_per_label[lbl_idx] = np.zeros(pts.shape[0], dtype=int)
         wcss_per_label[lbl_idx] = wcss
 
     def precompute_next_split_refine(lbl_idx: int) -> None:
         pts = points_per_label[lbl_idx]
         current_centroids = centroids_per_label[lbl_idx]
-        local_labels = local_labels_per_label[lbl_idx]
+        local_labels = cluster_labels_per_label[lbl_idx]
         X2 = X2_per_label[lbl_idx]
         sum_X2 = sum_X2_per_label[lbl_idx]
 
@@ -188,20 +189,20 @@ def precomputed_bisecting_kmeans_by_label_optimized(  # noqa: C901 - candidate o
         if not heap:
             break
 
-        _neg_red, best_lbl = heapq.heappop(heap)
+        _neg_red, best_label = heapq.heappop(heap)
 
-        if best_lbl not in pending_splits:
+        if best_label not in pending_splits:
             continue
 
-        new_wcss, new_labels, new_centroids = pending_splits.pop(best_lbl)
+        new_wcss, new_labels, new_centroids = pending_splits.pop(best_label)
 
-        centroids_per_label[best_lbl] = new_centroids
-        local_labels_per_label[best_lbl] = new_labels
-        wcss_per_label[best_lbl] = new_wcss
+        centroids_per_label[best_label] = new_centroids
+        cluster_labels_per_label[best_label] = new_labels
+        wcss_per_label[best_label] = new_wcss
 
         current_total_clusters += 1
 
-        precompute_next_split_refine(best_lbl)
+        precompute_next_split_refine(best_label)
 
     # Reconstruct
     labels_final = np.empty(n_samples, dtype=int)
@@ -212,7 +213,7 @@ def precomputed_bisecting_kmeans_by_label_optimized(  # noqa: C901 - candidate o
         l_centroids = centroids_per_label[lbl_idx]
 
         # local labels are 0..k_local-1
-        labels_final[l_indices] = local_labels_per_label[lbl_idx] + global_cluster_counter
+        labels_final[l_indices] = cluster_labels_per_label[lbl_idx] + global_cluster_counter
 
         global_cluster_counter += l_centroids.shape[0]
 
@@ -396,9 +397,9 @@ def precomputed_bisecting_kmeans_by_label_optimized_no_refine(  # noqa: C901, PL
 
         # Create 2 new nodes
         # Need to split node.indices based on sub_labels
-        # node.indices is a boolean mask of shape (n_class_pts,)
+        # node.indices is a boolean mask of shape (n_label_points,)
 
-        # Get indices of points in this cluster relative to the class group
+        # Get indices of points in this cluster relative to the label group
         # np.flatnonzero(node.indices) gives indices into pts
         # sub_labels corresponds to these indices
 
@@ -467,7 +468,7 @@ def precomputed_bisecting_kmeans_by_label_optimized_no_refine(  # noqa: C901, PL
 
     global_counter = 0
     for lbl_idx in range(n_labels):
-        class_nodes = nodes_by_label.get(lbl_idx, [])
+        label_nodes = nodes_by_label.get(lbl_idx, [])
         # Order doesn't strictly matter for correctness, but for stability maybe?
         # Let's just iterate
 
@@ -475,8 +476,8 @@ def precomputed_bisecting_kmeans_by_label_optimized_no_refine(  # noqa: C901, PL
         global_indices = indices_per_label[lbl_idx]
 
         # For each node, mark its points in labels_final
-        for node in class_nodes:
-            # node.indices is boolean mask relative to class
+        for node in label_nodes:
+            # node.indices is a boolean mask relative to the label group
             # global_indices[node.indices] give global indices
             labels_final[global_indices[node.indices]] = global_counter
             global_counter += 1

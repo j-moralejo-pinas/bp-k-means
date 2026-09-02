@@ -113,7 +113,7 @@ def build_color_map(
 
     Color scheme:
     - Non-BP-KMeans algorithms each get a distinct hue from tab10.
-    - BP-KMeans ranking methods (label_selection_method) each get a distinct
+    - BP-KMeans metrics each get a distinct
       hue continuing from where non-BP hues left off.
     - Higher n_init → darker shade (lower lightness).
     """
@@ -161,19 +161,21 @@ def build_color_map(
 
 def build_marker_map(df: pd.DataFrame) -> dict[str, str]:
     """
-    Return a label-string → matplotlib marker dict based on reinit_method.
+    Return a label-string → matplotlib marker dict based on init_strategy.
 
-    Non-BP-KMeans algorithms get 'o'.  Each unique reinit_method in BP-KMeans gets a distinct marker
+    Non-BP-KMeans algorithms get 'o'.  Each unique init_strategy in BP-KMeans gets a distinct marker
     from MARKERS.
     """
     unique_algs = sorted(df["algorithm"].unique())
     unique_n_inits = sorted(df["n_init"].unique())
-    reinit_methods = sorted({m.group(2) for a in unique_algs if (m := _BP_RE.search(a))})
-    reinit_to_marker = {rm: MARKERS[i % len(MARKERS)] for i, rm in enumerate(reinit_methods)}
+    init_strategies = sorted({m.group(2) for a in unique_algs if (m := _BP_RE.search(a))})
+    init_strategy_to_marker = {
+        strategy: MARKERS[i % len(MARKERS)] for i, strategy in enumerate(init_strategies)
+    }
     marker_map: dict[str, str] = {}
     for alg in unique_algs:
         bp_m = _BP_RE.search(alg)
-        marker = reinit_to_marker.get(bp_m.group(2), "o") if bp_m else "o"
+        marker = init_strategy_to_marker.get(bp_m.group(2), "o") if bp_m else "o"
         for n_init in unique_n_inits:
             marker_map[f"{alg} | n_init={n_init}"] = marker
     return marker_map

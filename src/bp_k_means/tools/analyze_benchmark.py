@@ -329,18 +329,18 @@ def _analyze_bp_components(
     analyses = [
         (
             "vary_label_sel",
-            ["label_selection_method"],
+            ["ranking_metric"],
             {
-                "reinit_method": "I_LRI",
+                "init_strategy": "I_LRI",
                 "init_algo": "KMEANS_PLUS_PLUS",
                 "n_init": SPECIAL_N_INIT,
             },
         ),
         (
             "vary_reinit",
-            ["reinit_method"],
+            ["init_strategy"],
             {
-                "label_selection_method": "M_L",
+                "ranking_metric": "M_L",
                 "init_algo": "KMEANS_PLUS_PLUS",
                 "n_init": SPECIAL_N_INIT,
             },
@@ -349,8 +349,8 @@ def _analyze_bp_components(
             "vary_init_algo",
             ["init_algo"],
             {
-                "label_selection_method": "M_L",
-                "reinit_method": "I_LRI",
+                "ranking_metric": "M_L",
+                "init_strategy": "I_LRI",
                 "n_init": SPECIAL_N_INIT,
             },
         ),
@@ -358,24 +358,24 @@ def _analyze_bp_components(
             "vary_n_init",
             ["n_init"],
             {
-                "label_selection_method": "M_L",
-                "reinit_method": "I_LRI",
+                "ranking_metric": "M_L",
+                "init_strategy": "I_LRI",
                 "init_algo": "KMEANS_PLUS_PLUS",
             },
         ),
         (
             "vary_label_sel_x_reinit",
-            ["label_selection_method", "reinit_method"],
+            ["ranking_metric", "init_strategy"],
             {"init_algo": "KMEANS_PLUS_PLUS", "n_init": SPECIAL_N_INIT},
         ),
         (
             "vary_label_sel_x_reinit_32",
-            ["label_selection_method", "reinit_method"],
+            ["ranking_metric", "init_strategy"],
             {"init_algo": "KMEANS_PLUS_PLUS", "n_init": SPECIAL_N_INIT_EXTENDED},
         ),
         (
             "vary_label_sel_x_reinit_1",
-            ["label_selection_method", "reinit_method"],
+            ["ranking_metric", "init_strategy"],
             {"init_algo": "KMEANS_PLUS_PLUS", "n_init": 1},
         ),
     ]

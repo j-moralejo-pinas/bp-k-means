@@ -159,7 +159,7 @@ def bp_algorithm_from_spec(spec: str) -> str:
     if len(parts) != EXPECTED_COMBINATION_PARTS:
         msg = (
             "BP-KMeans combination must be either a full algorithm name or "
-            "label_selection,reinit_method,init_algo"
+            "ranking_metric,init_strategy,init_algo"
         )
         raise argparse.ArgumentTypeError(msg)
     return f"BP-KMeans ({parts[0]}, {parts[1]}, {parts[2]})"

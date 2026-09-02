@@ -1,7 +1,7 @@
 """
 Unified BP-KMeans: greedy label-constrained clustering.
 
-The module exposes configurable ranking and initialization strategies.
+The module exposes configurable label-selection metrics and initialization strategies.
 """
 
 import heapq
@@ -24,9 +24,9 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
-class RankingStrategy(Enum):
+class RankingMetric(Enum):
     """
-    Ranking strategies for label selection.
+    Label-selection metrics.
 
     M_L:   Total WCSS of the label's clusters.
     M_C:   Maximum single-cluster WCSS within the label.
@@ -79,8 +79,8 @@ def _wcss_per_cluster(
     ) * np.einsum("ij,ij->i", centroids, centroids)
 
 
-def _compute_rank(
-    ranking: RankingStrategy,
+def _compute_metric(
+    ranking_metric: RankingMetric,
     wcss_total: float,
     local_labels: "NDArray",
     X2: "NDArray",
@@ -88,15 +88,15 @@ def _compute_rank(
     k_y: int,
     n_y: int,
 ) -> float:
-    """Compute the ranking score for a label."""
-    if ranking == RankingStrategy.M_L:
+    """Compute the label-selection metric score."""
+    if ranking_metric == RankingMetric.M_L:
         score = wcss_total
-    elif ranking == RankingStrategy.M_C:
+    elif ranking_metric == RankingMetric.M_C:
         score = float(np.max(_wcss_per_cluster(local_labels, X2, centroids, k_y)))
-    elif ranking == RankingStrategy.M_ERL:
+    elif ranking_metric == RankingMetric.M_ERL:
         score = 0.0 if k_y >= n_y else wcss_total if k_y == n_y - 1 else wcss_total / (k_y + 1)
     else:
-        msg = f"Unsupported ranking strategy: {ranking}"
+        msg = f"Unsupported ranking metric: {ranking_metric}"
         raise ValueError(msg)
     return score
 
@@ -250,7 +250,7 @@ def bp_kmeans(
     seed: int | np.random.Generator = 42,
     n_init: int = 10,
     *,
-    ranking_strategy: RankingStrategy = RankingStrategy.M_ERL,
+    ranking_metric: RankingMetric = RankingMetric.M_ERL,
     init_strategy: InitStrategy = InitStrategy.I_CRI,
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
     subsample_size: int = 1000,
@@ -273,8 +273,8 @@ def bp_kmeans(
         Random seed.
     n_init : int
         Number of k-means restarts per split.
-    ranking_strategy : RankingStrategy
-        Label selection strategy.
+    ranking_metric : RankingMetric
+        Ranking metric used for label selection.
     init_strategy : InitStrategy
         Centroid expansion strategy.
     init_algorithm : InitAlgorithm
@@ -299,23 +299,23 @@ def bp_kmeans(
     _, y = np.unique(y, return_inverse=True)
 
     n_samples = X.shape[0]
-    classes: list[int] = [int(c) for c in np.unique(y)]
-    n_classes = len(classes)
+    labels: list[int] = [int(label) for label in np.unique(y)]
+    n_labels = len(labels)
 
     if target_k > n_samples:
         msg = "target_k cannot be larger than number of data points"
         raise ValueError(msg)
-    if target_k < n_classes:
-        msg = "target_k cannot be smaller than number of unique classes in y"
+    if target_k < n_labels:
+        msg = "target_k cannot be smaller than number of unique labels in y"
         raise ValueError(msg)
     if target_k == n_samples:
         return np.arange(n_samples)
 
-    # Global cluster ID tracking: each class starts with one cluster
-    global_cluster_of_class: dict[int, list[int]] = {}
+    # Global cluster ID tracking: each label starts with one cluster
+    global_clusters_per_label: dict[int, list[int]] = {}
     current_cluster_id = 0
-    for c in classes:
-        global_cluster_of_class[c] = [current_cluster_id]
+    for label in labels:
+        global_clusters_per_label[label] = [current_cluster_id]
         current_cluster_id += 1
 
     # Pre-organize data by label (sorted for cache-friendly access)
@@ -330,45 +330,45 @@ def bp_kmeans(
     idx_groups = np.split(order, split_indices)
     unique_y_vals = [int(c) for c in np.nonzero(counts)[0]]
 
-    points_per_class = dict(zip(unique_y_vals, groups, strict=True))
-    idx_per_class = dict(zip(unique_y_vals, idx_groups, strict=True))
+    points_per_label = dict(zip(unique_y_vals, groups, strict=True))
+    indices_per_label = dict(zip(unique_y_vals, idx_groups, strict=True))
 
-    # Per-class state: centroids, local labels, WCSS, precomputed squared norms
-    centroids_per_class: dict[int, NDArray] = {}
-    class_labels: dict[int, NDArray] = {}
-    wcss_per_class: dict[int, float] = {}
-    X2_per_class: dict[int, NDArray] = {}
-    sum_X2_per_class: dict[int, float] = {}
+    # Per-label state: centroids, local cluster labels, WCSS, precomputed squared norms
+    centroids_per_label: dict[int, NDArray] = {}
+    cluster_labels_per_label: dict[int, NDArray] = {}
+    wcss_per_label: dict[int, float] = {}
+    X2_per_label: dict[int, NDArray] = {}
+    sum_X2_per_label: dict[int, float] = {}
 
-    for c in classes:
-        pts = points_per_class[c]
+    for label in labels:
+        pts = points_per_label[label]
         X2 = np.einsum("ij,ij->i", pts, pts)
-        X2_per_class[c] = X2
-        sum_X2_per_class[c] = float(np.sum(X2))
+        X2_per_label[label] = X2
+        sum_X2_per_label[label] = float(np.sum(X2))
 
         centroid = pts.mean(axis=0)
-        centroids_per_class[c] = centroid[None, :]
+        centroids_per_label[label] = centroid[None, :]
 
         wcss = float(X2.sum() - pts.shape[0] * (centroid @ centroid))
-        wcss_per_class[c] = wcss
-        class_labels[c] = np.zeros(pts.shape[0], dtype=int)
+        wcss_per_label[label] = wcss
+        cluster_labels_per_label[label] = np.zeros(pts.shape[0], dtype=int)
 
     # Dispatch to precomputed variant for exact-reduction ranking
-    if ranking_strategy == RankingStrategy.M_RL:
+    if ranking_metric == RankingMetric.M_RL:
         return _bp_kmeans_precomputed(
-            classes,
+            labels,
             target_k,
             n_init,
             rng,
             init_strategy,
-            points_per_class,
-            idx_per_class,
-            centroids_per_class,
-            class_labels,
-            wcss_per_class,
-            X2_per_class,
-            sum_X2_per_class,
-            global_cluster_of_class,
+            points_per_label,
+            indices_per_label,
+            centroids_per_label,
+            cluster_labels_per_label,
+            wcss_per_label,
+            X2_per_label,
+            sum_X2_per_label,
+            global_clusters_per_label,
             current_cluster_id,
             n_samples,
             init_algorithm,
@@ -377,29 +377,29 @@ def bp_kmeans(
 
     # Build initial heap (max-heap via negation)
     heap: list[tuple[float, int]] = []
-    for c in classes:
-        score = _compute_rank(
-            ranking_strategy,
-            wcss_per_class[c],
-            class_labels[c],
-            X2_per_class[c],
-            centroids_per_class[c],
+    for label in labels:
+        score = _compute_metric(
+            ranking_metric,
+            wcss_per_label[label],
+            cluster_labels_per_label[label],
+            X2_per_label[label],
+            centroids_per_label[label],
             1,
-            points_per_class[c].shape[0],
+            points_per_label[label].shape[0],
         )
-        heap.append((-score, c))
+        heap.append((-score, label))
     heapq.heapify(heap)
 
     # Main loop: split the highest-ranked label until target_k clusters
     while current_cluster_id < target_k:
         logger.debug("BP-KMeans: %d / %d clusters", current_cluster_id, target_k)
 
-        _, worst_class = heapq.heappop(heap)
+        _, selected_label = heapq.heappop(heap)
 
-        pts = points_per_class[worst_class]
-        X2 = X2_per_class[worst_class]
-        sum_X2 = sum_X2_per_class[worst_class]
-        current_centroids = centroids_per_class[worst_class]
+        pts = points_per_label[selected_label]
+        X2 = X2_per_label[selected_label]
+        sum_X2 = sum_X2_per_label[selected_label]
+        current_centroids = centroids_per_label[selected_label]
         curr_k = current_centroids.shape[0]
         new_k = curr_k + 1
 
@@ -407,7 +407,7 @@ def bp_kmeans(
             pts,
             X2,
             sum_X2,
-            class_labels[worst_class],
+            cluster_labels_per_label[selected_label],
             current_centroids,
             curr_k,
             new_k,
@@ -418,12 +418,12 @@ def bp_kmeans(
             subsample_size,
         )
 
-        class_labels[worst_class] = best_labels
-        centroids_per_class[worst_class] = best_centroids
-        wcss_per_class[worst_class] = best_wcss
+        cluster_labels_per_label[selected_label] = best_labels
+        centroids_per_label[selected_label] = best_centroids
+        wcss_per_label[selected_label] = best_wcss
 
-        score = _compute_rank(
-            ranking_strategy,
+        score = _compute_metric(
+            ranking_metric,
             best_wcss,
             best_labels,
             X2,
@@ -431,34 +431,34 @@ def bp_kmeans(
             new_k,
             pts.shape[0],
         )
-        heapq.heappush(heap, (-score, worst_class))
+        heapq.heappush(heap, (-score, selected_label))
 
-        global_cluster_of_class[worst_class].append(current_cluster_id)
+        global_clusters_per_label[selected_label].append(current_cluster_id)
         current_cluster_id += 1
 
     # Reconstruct global labels
     labels_global = np.empty(n_samples, dtype=int)
-    for c in classes:
-        global_ids = np.array(global_cluster_of_class[c], dtype=int)
-        labels_global[idx_per_class[c]] = global_ids[class_labels[c]]
+    for label in labels:
+        global_ids = np.array(global_clusters_per_label[label], dtype=int)
+        labels_global[indices_per_label[label]] = global_ids[cluster_labels_per_label[label]]
 
     return labels_global
 
 
 def _bp_kmeans_precomputed(
-    classes: list[int],
+    labels: list[int],
     target_k: int,
     n_init: int,
     rng: np.random.Generator,
     init_strategy: InitStrategy,
-    points_per_class: dict[int, "NDArray"],
-    idx_per_class: dict[int, "NDArray"],
-    centroids_per_class: dict[int, "NDArray"],
-    class_labels: dict[int, "NDArray"],
-    wcss_per_class: dict[int, float],
-    X2_per_class: dict[int, "NDArray"],
-    sum_X2_per_class: dict[int, float],
-    global_cluster_of_class: dict[int, list[int]],
+    points_per_label: dict[int, "NDArray"],
+    indices_per_label: dict[int, "NDArray"],
+    centroids_per_label: dict[int, "NDArray"],
+    cluster_labels_per_label: dict[int, "NDArray"],
+    wcss_per_label: dict[int, float],
+    X2_per_label: dict[int, "NDArray"],
+    sum_X2_per_label: dict[int, float],
+    global_clusters_per_label: dict[int, list[int]],
     current_cluster_id: int,
     n_samples: int,
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
@@ -468,9 +468,9 @@ def _bp_kmeans_precomputed(
     pending_splits: dict[int, tuple[float, NDArray, NDArray]] = {}
     heap: list[tuple[float, int]] = []
 
-    def precompute_next_split(c: int) -> None:
-        pts = points_per_class[c]
-        current_centroids = centroids_per_class[c]
+    def precompute_next_split(label: int) -> None:
+        pts = points_per_label[label]
+        current_centroids = centroids_per_label[label]
         curr_k = current_centroids.shape[0]
         new_k = curr_k + 1
 
@@ -479,9 +479,9 @@ def _bp_kmeans_precomputed(
 
         best_wcss, best_labels, best_centroids = _run_split(
             pts,
-            X2_per_class[c],
-            sum_X2_per_class[c],
-            class_labels[c],
+            X2_per_label[label],
+            sum_X2_per_label[label],
+            cluster_labels_per_label[label],
             current_centroids,
             curr_k,
             new_k,
@@ -492,44 +492,44 @@ def _bp_kmeans_precomputed(
             subsample_size,
         )
 
-        reduction = wcss_per_class[c] - best_wcss
+        reduction = wcss_per_label[label] - best_wcss
         if reduction <= 0:
             return
-        heapq.heappush(heap, (-reduction, c))
-        pending_splits[c] = (best_wcss, best_labels, best_centroids)
+        heapq.heappush(heap, (-reduction, label))
+        pending_splits[label] = (best_wcss, best_labels, best_centroids)
 
-    # Initial precomputation for all classes
-    for c in classes:
-        precompute_next_split(c)
+    # Initial precomputation for all labels
+    for label in labels:
+        precompute_next_split(label)
 
     # Iterative splitting by highest actual WCSS reduction
     while current_cluster_id < target_k:
         if not heap:
             break
 
-        _, best_c = heapq.heappop(heap)
+        _, selected_label = heapq.heappop(heap)
 
-        if best_c not in pending_splits:
+        if selected_label not in pending_splits:
             continue
 
-        next_wcss, next_labels, next_centroids = pending_splits.pop(best_c)
+        next_wcss, next_labels, next_centroids = pending_splits.pop(selected_label)
 
-        centroids_per_class[best_c] = next_centroids
-        class_labels[best_c] = next_labels
-        wcss_per_class[best_c] = next_wcss
+        centroids_per_label[selected_label] = next_centroids
+        cluster_labels_per_label[selected_label] = next_labels
+        wcss_per_label[selected_label] = next_wcss
 
-        global_cluster_of_class[best_c].append(current_cluster_id)
+        global_clusters_per_label[selected_label].append(current_cluster_id)
         current_cluster_id += 1
 
         logger.debug("BP-KMeans (precomputed): %d / %d clusters", current_cluster_id, target_k)
 
-        precompute_next_split(best_c)
+        precompute_next_split(selected_label)
 
     # Reconstruct global labels
     labels_global = np.empty(n_samples, dtype=int)
-    for c in classes:
-        global_ids = np.array(global_cluster_of_class[c], dtype=int)
-        labels_global[idx_per_class[c]] = global_ids[class_labels[c]]
+    for label in labels:
+        global_ids = np.array(global_clusters_per_label[label], dtype=int)
+        labels_global[indices_per_label[label]] = global_ids[cluster_labels_per_label[label]]
 
     return labels_global
 
@@ -539,7 +539,7 @@ class BPKMeans(BaseAlgo):
 
     def __init__(
         self,
-        ranking_strategy: RankingStrategy = RankingStrategy.M_ERL,
+        ranking_metric: RankingMetric = RankingMetric.M_ERL,
         init_strategy: InitStrategy = InitStrategy.I_CRI,
         init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
         subsample_size: int = 1000,
@@ -550,8 +550,8 @@ class BPKMeans(BaseAlgo):
 
         Parameters
         ----------
-        ranking_strategy : RankingStrategy
-            Strategy used to select the next label to split.
+        ranking_metric : RankingMetric
+            Ranking metric used to select the next label to split.
         init_strategy : InitStrategy
             Strategy used to initialize each split.
         init_algorithm : InitAlgorithm
@@ -564,7 +564,7 @@ class BPKMeans(BaseAlgo):
             Number of k-means restarts per split.
         """
         super().__init__(seed=seed, n_init=n_init)
-        self.ranking_strategy = ranking_strategy
+        self.ranking_metric = ranking_metric
         self.init_strategy = init_strategy
         self.init_algorithm = init_algorithm
         self.subsample_size = subsample_size
@@ -607,7 +607,7 @@ class BPKMeans(BaseAlgo):
             target_k,
             seed=self.seed,
             n_init=self.n_init,
-            ranking_strategy=self.ranking_strategy,
+            ranking_metric=self.ranking_metric,
             init_strategy=self.init_strategy,
             init_algorithm=self.init_algorithm,
             subsample_size=self.subsample_size,

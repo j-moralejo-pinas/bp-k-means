@@ -243,7 +243,7 @@ class KMeans(BaseAlgo):
         X : ArrayLike
             Feature matrix.
         y : ArrayLike | None
-            Ignored class labels, accepted for interface compatibility.
+            Ignored labels, accepted for interface compatibility.
         target_k : int
             Requested number of clusters.
 

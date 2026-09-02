@@ -7,7 +7,7 @@ from bp_k_means.algos.bp_kmeans import (
     BPKMeans,
     InitAlgorithm,
     InitStrategy,
-    RankingStrategy,
+    RankingMetric,
     bp_kmeans,
 )
 
@@ -20,7 +20,7 @@ __all__ = [
     "BPKMeans",
     "InitAlgorithm",
     "InitStrategy",
-    "RankingStrategy",
+    "RankingMetric",
     "__version__",
     "bp_kmeans",
 ]
