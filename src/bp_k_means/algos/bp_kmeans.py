@@ -27,18 +27,16 @@ class RankingStrategy(Enum):
     """
     Ranking strategies for label selection.
 
-    R_L:   Total WCSS of the label's clusters.
-    R_C:   Maximum single-cluster WCSS within the label.
-    R_ERL: Estimated WCSS reduction (label-level), scaled by k_y / (k_y + 1).
-    R_ERC: Estimated WCSS reduction (cluster-level), scaled by k_y / (k_y + 1).
-    R_RL:  Exact WCSS reduction via precomputed trial split.
+    M_L:   Total WCSS of the label's clusters.
+    M_C:   Maximum single-cluster WCSS within the label.
+    M_ERL: Estimated WCSS reduction (label-level), scaled by k_y / (k_y + 1).
+    M_RL:  Exact WCSS reduction via precomputed trial split.
     """
 
-    R_L = 1
-    R_C = 2
-    R_ERL = 3
-    R_ERC = 4
-    R_RL = 5
+    M_L = 1
+    M_C = 2
+    M_ERL = 3
+    M_RL = 4
 
 
 class InitStrategy(Enum):
@@ -90,20 +88,12 @@ def _compute_rank(
     n_y: int,
 ) -> float:
     """Compute the ranking score for a label."""
-    if ranking == RankingStrategy.R_L:
+    if ranking == RankingStrategy.M_L:
         score = wcss_total
-    elif ranking == RankingStrategy.R_C:
+    elif ranking == RankingStrategy.M_C:
         score = float(np.max(_wcss_per_cluster(local_labels, X2, centroids, k_y)))
-    elif ranking in (RankingStrategy.R_ERL, RankingStrategy.R_ERC):
-        if k_y >= n_y:
-            score = 0.0
-        else:
-            base_score = (
-                wcss_total
-                if ranking == RankingStrategy.R_ERL
-                else float(np.max(_wcss_per_cluster(local_labels, X2, centroids, k_y)))
-            )
-            score = base_score if k_y == n_y - 1 else base_score / (k_y + 1)
+    elif ranking == RankingStrategy.M_ERL:
+        score = 0.0 if k_y >= n_y else wcss_total if k_y == n_y - 1 else wcss_total / (k_y + 1)
     else:
         msg = f"Unsupported ranking strategy: {ranking}"
         raise ValueError(msg)
@@ -259,7 +249,7 @@ def bp_kmeans(
     seed: int | np.random.Generator = 42,
     n_init: int = 10,
     *,
-    ranking_strategy: RankingStrategy = RankingStrategy.R_ERL,
+    ranking_strategy: RankingStrategy = RankingStrategy.M_ERL,
     init_strategy: InitStrategy = InitStrategy.I_CRI,
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
     subsample_size: int = 1000,
@@ -363,7 +353,7 @@ def bp_kmeans(
         class_labels[c] = np.zeros(pts.shape[0], dtype=int)
 
     # Dispatch to precomputed variant for exact-reduction ranking
-    if ranking_strategy == RankingStrategy.R_RL:
+    if ranking_strategy == RankingStrategy.M_RL:
         return _bp_kmeans_precomputed(
             classes,
             target_k,
@@ -473,7 +463,7 @@ def _bp_kmeans_precomputed(
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
     subsample_size: int = 1000,
 ) -> "NDArray":
-    """R_RL variant: precompute trial splits to rank by exact WCSS reduction."""
+    """M_RL variant: precompute trial splits to rank by exact WCSS reduction."""
     pending_splits: dict[int, tuple[float, NDArray, NDArray]] = {}
     heap: list[tuple[float, int]] = []
 
@@ -548,7 +538,7 @@ class BPKMeans(BaseAlgo):
 
     def __init__(
         self,
-        ranking_strategy: RankingStrategy = RankingStrategy.R_ERL,
+        ranking_strategy: RankingStrategy = RankingStrategy.M_ERL,
         init_strategy: InitStrategy = InitStrategy.I_CRI,
         init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
         subsample_size: int = 1000,

@@ -66,6 +66,10 @@ class TestBasicBehavior:
 class TestRankingStrategies:
     """Test every supported label-ranking strategy."""
 
+    def test_names_match_paper(self) -> None:
+        """Expose the metric names used in the paper."""
+        assert [ranking.name for ranking in RankingStrategy] == ["M_L", "M_C", "M_ERL", "M_RL"]
+
     @pytest.mark.parametrize("ranking", list(RankingStrategy))
     def test_all_rankings_produce_valid_output(
         self, sample_data: tuple[np.ndarray, np.ndarray], ranking: RankingStrategy

@@ -229,7 +229,7 @@ def _build_algorithms(
         algorithms.append(("Bisecting KMeans", BisectingKMeansNoRefine(seed=seed, n_init=n_init)))
         algorithms.append(
             (
-                "Bisecting KMeans (R_RL)",
+                "Bisecting KMeans (M_RL)",
                 PrecomputedBisectingKMeansNoRefine(seed=seed, n_init=n_init),
             )
         )

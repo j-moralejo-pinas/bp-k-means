@@ -287,10 +287,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--special-bp-combinations",
         type=parse_bp_combination_map,
-        default="1=R_C,I_CRI,KMEANS_PLUS_PLUS;32=R_RL,I_ACL,KMEANS_PLUS_PLUS",
+        default="1=M_C,I_CRI,KMEANS_PLUS_PLUS;32=M_RL,I_ACL,KMEANS_PLUS_PLUS",
         help=(
             "Semicolon-separated manual BP-KMeans combination per n_init, e.g. "
-            "'1=R_L,I_LRI,KMEANS_PLUS_PLUS;32=R_C,I_ACC,KMEANS_PLUS_PLUS'. "
+            "'1=M_L,I_LRI,KMEANS_PLUS_PLUS;32=M_C,I_ACC,KMEANS_PLUS_PLUS'. "
             "These combinations are plotted as BP-KMeans - globally tuned. "
             "The per-problem best BP-KMeans combination is always chosen separately "
             "for each special metric and n_init."
@@ -340,7 +340,7 @@ def _analyze_bp_components(
             "vary_reinit",
             ["reinit_method"],
             {
-                "label_selection_method": "R_L",
+                "label_selection_method": "M_L",
                 "init_algo": "KMEANS_PLUS_PLUS",
                 "n_init": SPECIAL_N_INIT,
             },
@@ -349,7 +349,7 @@ def _analyze_bp_components(
             "vary_init_algo",
             ["init_algo"],
             {
-                "label_selection_method": "R_L",
+                "label_selection_method": "M_L",
                 "reinit_method": "I_LRI",
                 "n_init": SPECIAL_N_INIT,
             },
@@ -358,7 +358,7 @@ def _analyze_bp_components(
             "vary_n_init",
             ["n_init"],
             {
-                "label_selection_method": "R_L",
+                "label_selection_method": "M_L",
                 "reinit_method": "I_LRI",
                 "init_algo": "KMEANS_PLUS_PLUS",
             },
@@ -500,21 +500,6 @@ def main(
         **_ag_kwargs,
     )
 
-    df_kpp_no_r_erc = cast(
-        "Any",
-        df_kpp[
-            (~df_kpp["algorithm"].str.startswith("BP-KMeans"))
-            | (df_kpp["label_selection_method"] != "R_ERC")
-        ].copy(),
-    )
-    analyze_grouping(
-        cast("pd.DataFrame", df_kpp_no_r_erc),
-        group_cols=["algorithm", "n_init"],
-        label_fn=alg_label,
-        save_dir=results_dir / "kpp_only_no_r_erc",
-        **_ag_kwargs,
-    )
-
     special_benchmarks = [
         (
             "com_madrid_osm_drive_nodes_split_split",
@@ -528,16 +513,15 @@ def main(
         ),
     ]
     for dataset_prefix, directory, title in special_benchmarks:
-        for restricted in (False, True):
-            suffix = "_kpp_only_no_r_erc" if restricted else ""
-            title_suffix = " (KMeans++, excluding R_ERC)" if restricted else ""
+        for kpp_only in (False, True):
+            suffix = "_kpp_only" if kpp_only else ""
+            title_suffix = " (KMeans++)" if kpp_only else ""
             analyze_special_metric(
                 dataset_prefix=dataset_prefix,
                 metric_keys=SPECIAL_METRICS,
                 save_dir=results_dir / f"{directory}{suffix}",
                 title_prefix=f"{title}{title_suffix}",
-                kpp_only=restricted,
-                exclude_r_erc=restricted,
+                kpp_only=kpp_only,
                 color_map=color_map,
                 marker_map=marker_map,
                 fill_map=fill_map,

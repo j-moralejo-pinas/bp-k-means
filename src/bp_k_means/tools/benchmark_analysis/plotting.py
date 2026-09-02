@@ -41,11 +41,10 @@ def set_suptitle(fig: Any, title: str | None, **kwargs: Any) -> None:
 
 
 MATH_LABELS = {
-    "R_L": r"$M_L$",
-    "R_C": r"$M_C$",
-    "R_ERL": r"$M_{ERL}$",
-    "R_ERC": r"$M_{ERC}$",
-    "R_RL": r"$M_{RL}$",
+    "M_L": r"$M_L$",
+    "M_C": r"$M_C$",
+    "M_ERL": r"$M_{ERL}$",
+    "M_RL": r"$M_{RL}$",
     "I_LRI": r"$I_{LRI}$",
     "I_CRI": r"$I_{CRI}$",
     "I_ACL": r"$I_{ACL}$",

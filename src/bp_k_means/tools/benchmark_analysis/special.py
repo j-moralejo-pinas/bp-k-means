@@ -415,7 +415,6 @@ def analyze_special_metric(
     title_prefix: str,
     *,
     kpp_only: bool = False,
-    exclude_r_erc: bool = False,
     color_map: dict[str, tuple] | None = None,
     marker_map: dict[str, str] | None = None,
     fill_map: dict[str, bool] | None = None,
@@ -445,14 +444,6 @@ def analyze_special_metric(
                 | (df_bp_parsed["init_algo"] == "KMEANS_PLUS_PLUS")
             ].copy(),
         )
-        if exclude_r_erc:
-            df = cast(
-                "Any",
-                df[
-                    (~df["algorithm"].str.startswith("BP-KMeans"))
-                    | (df["label_selection_method"] != "R_ERC")
-                ].copy(),
-            )
         if df.empty:
             return
 
