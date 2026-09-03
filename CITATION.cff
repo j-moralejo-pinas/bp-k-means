@@ -1,0 +1,46 @@
+cff-version: 1.2.0
+message: "If you use this work, please cite it as follows."
+title: "BP-KMeans: Refining Pre-Partitioned Data under Hard Group Constraints"
+abstract: >-
+  We study clustering applications in which data are already partitioned into
+  meaningful groups and the objective is to refine those groups into a larger
+  number of clusters without allowing any final cluster to cross the original
+  group boundaries. We propose BP-KMeans, a progressive groupwise refinement
+  framework that incrementally allocates additional clusters to selected groups
+  until a target number of clusters is reached. The method satisfies the
+  group-consistency constraint by construction and separates group selection
+  from the initialization strategy used to refit a selected group.
+authors:
+  - family-names: Moralejo-Piñas
+    given-names: Javier
+    email: jmoralej@pa.uc3m.es
+    orcid: "https://orcid.org/0009-0003-9997-0583"
+  - family-names: Fernández
+    given-names: Fernando
+    email: ffernand@inf.uc3m.es
+    orcid: "https://orcid.org/0000-0003-3801-6801"
+repository-code: "https://github.com/j-moralejo-pinas/bp-k-means"
+license: MIT
+keywords:
+  - constrained clustering
+  - k-means
+  - partition refinement
+  - cannot-link constraints
+  - groupwise clustering
+
+# Complete this section when the paper is published:
+# preferred-citation:
+#   type: article
+#   title: "BP-KMeans: Refining Pre-Partitioned Data under Hard Group Constraints"
+#   authors:
+#     - family-names: Moralejo-Piñas
+#       given-names: Javier
+#     - family-names: Fernández
+#       given-names: Fernando
+#   journal: "Journal Name"
+#   year: 20XX
+#   volume: "Volume"
+#   issue: "Issue"
+#   start: "First page"
+#   end: "Last page"
+#   doi: "10.xxxx/xxxxx"
