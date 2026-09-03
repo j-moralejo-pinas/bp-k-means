@@ -16,8 +16,8 @@ from bp_k_means.utils.logging import logger
 from .data import (
     HAC_STRENGTH_BENCHMARK_TYPE,
     OUTPUT_DIR,
-    parse_algorithm_components,
     read_metadata_files,
+    select_bp_vs_bisecting_kmeans,
 )
 from .plotting import (
     add_scatter_legends,
@@ -86,11 +86,13 @@ def _load_special_metric_metadata(
     return pd.DataFrame(rows)
 
 
-def _resolve_special_n_inits(df: pd.DataFrame, requested_n_inits: list[int] | None) -> list[int]:
+def _resolve_special_n_inits(
+    df: pd.DataFrame, manual_bp_algorithms: dict[int, str] | None
+) -> list[int]:
     available = sorted(int(v) for v in df["n_init"].dropna().unique())
     if not available:
         return []
-    values = [1, available[-1]] if requested_n_inits is None else requested_n_inits
+    values = sorted(manual_bp_algorithms) if manual_bp_algorithms else [1, available[-1]]
     resolved = sorted({int(v) for v in values if int(v) in available})
     missing = sorted({int(v) for v in values if int(v) not in available})
     if missing:
@@ -225,15 +227,11 @@ def _plot_special_metric_time_comparison(
     save_dir: Path,
     title_prefix: str,
     *,
-    n_inits: list[int] | None = None,
     manual_bp_algorithms: dict[int, str] | None = None,
 ) -> None:
     """Compare Bisecting KMeans with per-problem and globally tuned BP-KMeans rows."""
     df = cast("Any", df)
-    requested_n_inits = n_inits
-    if requested_n_inits is None and manual_bp_algorithms:
-        requested_n_inits = sorted(manual_bp_algorithms)
-    selected_n_inits = _resolve_special_n_inits(df, requested_n_inits)
+    selected_n_inits = _resolve_special_n_inits(df, manual_bp_algorithms)
     if not selected_n_inits:
         return
 
@@ -419,7 +417,6 @@ def analyze_special_metric(
     marker_map: dict[str, str] | None = None,
     fill_map: dict[str, bool] | None = None,
     legend_info: dict | None = None,
-    comparison_n_inits: list[int] | None = None,
     comparison_bp_algorithms: dict[int, str] | None = None,
     output_dir: Path = OUTPUT_DIR,
 ) -> None:
@@ -436,14 +433,7 @@ def analyze_special_metric(
         return
 
     if kpp_only:
-        df_bp_parsed = parse_algorithm_components(df)
-        df = cast(
-            "Any",
-            df_bp_parsed[
-                (~df_bp_parsed["algorithm"].str.startswith("BP-KMeans"))
-                | (df_bp_parsed["init_algo"] == "KMEANS_PLUS_PLUS")
-            ].copy(),
-        )
+        df = cast("Any", select_bp_vs_bisecting_kmeans(df))
         if df.empty:
             return
 
@@ -502,6 +492,5 @@ def analyze_special_metric(
             metric_label,
             save_dir,
             title_prefix,
-            n_inits=comparison_n_inits,
             manual_bp_algorithms=comparison_bp_algorithms,
         )

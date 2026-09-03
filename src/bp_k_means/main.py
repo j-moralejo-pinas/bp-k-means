@@ -123,11 +123,13 @@ def _config_for_json(config: ExperimentConfig) -> dict[str, object]:
 def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) -> None:
     """Run all benchmark stages selected by ``config``."""
     config.output_dir.mkdir(parents=True, exist_ok=True)
+    benchmark_output_dir = config.output_dir / "benchmark"
+    benchmark_output_dir.mkdir(parents=True, exist_ok=True)
     manifest = {
         "config_file": config_name,
         "config": _config_for_json(config),
     }
-    (config.output_dir / "experiment_config.json").write_text(
+    (benchmark_output_dir / "experiment_config.json").write_text(
         json.dumps(manifest, indent=2) + "\n",
         encoding="utf-8",
     )
@@ -135,7 +137,7 @@ def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) 
     if config.run_regular:
         run_benchmark(
             datasets_dir=config.datasets_dir,
-            output_dir=config.output_dir,
+            output_dir=benchmark_output_dir,
             seed=config.seed,
             k_multipliers=config.k_multipliers,
             n_inits=config.n_inits,
@@ -151,7 +153,7 @@ def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) 
         run_hac_strength_benchmark(
             cluster_multiplier=config.hac_strength_multiplier,
             datasets_dir=config.datasets_dir,
-            output_dir=config.output_dir,
+            output_dir=benchmark_output_dir,
             seed=config.seed,
             n_inits=config.n_inits,
             subsample_size=config.subsample_size,
@@ -165,7 +167,7 @@ def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) 
     if config.run_special:
         benchmark_castile_leon_max_response_time(
             datasets_dir=config.datasets_dir,
-            output_dir=config.output_dir,
+            output_dir=benchmark_output_dir,
             seed=config.seed,
             n_inits=config.n_inits,
             subsample_size=config.subsample_size,
@@ -177,7 +179,7 @@ def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) 
         )
         benchmark_com_madrid_avg_distance_to_centroid(
             datasets_dir=config.datasets_dir,
-            output_dir=config.output_dir,
+            output_dir=benchmark_output_dir,
             seed=config.seed,
             n_inits=config.n_inits,
             subsample_size=config.subsample_size,

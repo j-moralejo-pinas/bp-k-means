@@ -279,9 +279,11 @@ def _append_legend_section(
     title: str,
     entries: list[tuple],
     mode: str,
+    *,
+    show_single_entry: bool = False,
 ) -> None:
     """Append one typed section to a scatter legend."""
-    if len(entries) <= 1:
+    if not entries or (len(entries) == 1 and not show_single_entry):
         return
     handles.append(mpatches.Patch(color="none", label=title))
     labels.append(title)
@@ -336,7 +338,14 @@ def add_scatter_legends(
         ("fill_entries", "── Initialization Algorithm ──", "fill"),
         ("n_init_lightness_entries", "── # Initializations (light→dark) ──", "lightness"),
     ):
-        _append_legend_section(handles, labels, title, legend_info.get(key, []), mode)
+        _append_legend_section(
+            handles,
+            labels,
+            title,
+            legend_info.get(key, []),
+            mode,
+            show_single_entry=key == "baseline_color_entries",
+        )
 
     if not handles:
         return

@@ -106,7 +106,9 @@ def test_experiment_records_seed_and_repeats_deterministically(tmp_path: Path) -
     )
 
     run_experiment(config, config_name="experiment.toml")
-    manifest = json.loads((output_dir / "experiment_config.json").read_text(encoding="utf-8"))
+    manifest = json.loads(
+        (output_dir / "benchmark" / "experiment_config.json").read_text(encoding="utf-8")
+    )
     metadata_paths = list(output_dir.rglob("metadata.json"))
     first_instances = pd.read_parquet(sorted(output_dir.rglob("instances.parquet"))[0])
 

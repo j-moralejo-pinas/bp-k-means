@@ -19,7 +19,7 @@ from bp_k_means.algos.precomputed_bisecting_k_means_optimized import (
 from bp_k_means.utils.logging import logger
 from bp_k_means.utils.metrics import overall_wcss
 
-OUTPUT_DIR = Path("output")
+OUTPUT_DIR = Path("output/benchmark")
 DEFAULT_K_MULTIPLIERS = (1.5, 2.0, 4.0)
 DEFAULT_N_INITS = (1, 2, 4, 8, 16, 32)
 REGULAR_BENCHMARK_DATASET_EXCLUDE_PATTERNS = ("com_madrid", "castile_and_leon")

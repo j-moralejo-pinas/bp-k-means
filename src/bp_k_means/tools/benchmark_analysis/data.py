@@ -11,8 +11,8 @@ import pyarrow.parquet as pq
 
 from bp_k_means.utils.logging import logger
 
-OUTPUT_DIR = Path("output")
-RESULTS_DIR = OUTPUT_DIR / "analysis"
+OUTPUT_DIR = Path("output/benchmark")
+RESULTS_DIR = Path("output/analysis")
 DATA_DIR = Path("data/datasets")
 HAC_STRENGTH_BENCHMARK_TYPE = "hac_strength"
 REGULAR_DATASET_EXCLUDE_PATTERNS = ("com_madrid", "castile_and_leon")
@@ -121,6 +121,17 @@ def parse_algorithm_components(df: pd.DataFrame) -> pd.DataFrame:
     result["init_strategy"] = parsed[1]
     result["init_algo"] = parsed[2]
     return result
+
+
+def select_bp_vs_bisecting_kmeans(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep standard Bisecting KMeans and BP-KMeans initialized with k-means++."""
+    if df.empty:
+        return df.copy()
+    parsed = parse_algorithm_components(df)
+    is_bisecting = parsed["algorithm"] == "Bisecting KMeans"
+    is_bp_kmeans = parsed["algorithm"].str.startswith("BP-KMeans")
+    is_kpp_bp = is_bp_kmeans & (parsed["init_algo"] == "KMEANS_PLUS_PLUS")
+    return parsed[is_bisecting | is_kpp_bp].copy()
 
 
 def add_dataset_context(df: pd.DataFrame, data_dir: Path = DATA_DIR) -> pd.DataFrame:

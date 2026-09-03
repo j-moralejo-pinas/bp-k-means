@@ -56,7 +56,7 @@ file are resolved relative to the configuration file. Datasets must be available
     bp-k-means-benchmark --config experiments/default.toml
     bp-k-means-analyze
 
-The benchmark records its effective configuration under ``output/experiment_config.json`` and
+The benchmark records its effective configuration under ``output/benchmark/experiment_config.json`` and
 stores the seed in each run's metadata. Dataset construction uses the source URLs and processing
 steps documented in :mod:`bp_k_means.tools.create_dataset`; data providers' terms and attribution
 requirements apply to any redistribution.

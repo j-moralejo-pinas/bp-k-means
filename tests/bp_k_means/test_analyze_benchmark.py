@@ -3,9 +3,12 @@
 import json
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import pandas as pd
 
 from bp_k_means.tools.analyze_benchmark import compute_relative_metrics, load_all_metadata
+from bp_k_means.tools.benchmark_analysis.data import select_bp_vs_bisecting_kmeans
+from bp_k_means.tools.benchmark_analysis.plotting import add_scatter_legends
 
 
 def test_regular_metadata_excludes_special_and_hac_benchmarks(tmp_path: Path) -> None:
@@ -56,3 +59,40 @@ def test_relative_metrics_are_normalized_per_benchmark_case() -> None:
     assert relative["best_time"].tolist() == [2.0, 2.0, 5.0, 5.0]
     assert relative["relative_wcss"].tolist() == [1.0, 1.5, 1.0, 1.2]
     assert relative["relative_time"].tolist() == [2.0, 1.0, 1.0, 2.0]
+
+
+def test_select_bp_vs_bisecting_kmeans_keeps_only_requested_algorithms() -> None:
+    """Restrict comparison rows to BP-KMeans++ and standard Bisecting KMeans."""
+    metadata = pd.DataFrame(
+        {
+            "algorithm": [
+                "Bisecting KMeans",
+                "Bisecting KMeans (M_RL)",
+                "BP-KMeans (M_L, I_LRI, KMEANS_PLUS_PLUS)",
+                "BP-KMeans (M_L, I_LRI, RANDOM_SAMPLING)",
+                "HAC Ward (NNC)",
+            ],
+            "n_init": [1, 1, 1, 1, 1],
+        }
+    )
+
+    selected = select_bp_vs_bisecting_kmeans(metadata)
+
+    assert selected["algorithm"].tolist() == [
+        "Bisecting KMeans",
+        "BP-KMeans (M_L, I_LRI, KMEANS_PLUS_PLUS)",
+    ]
+
+
+def test_scatter_legend_shows_single_bisecting_baseline() -> None:
+    """Keep the sole baseline visible in the comparison graph legend."""
+    figure, axis = plt.subplots()
+    add_scatter_legends(
+        axis,
+        {"baseline_color_entries": [("Bisecting KMeans", (0.1, 0.2, 0.3))]},
+    )
+
+    legend_labels = [text.get_text() for text in axis.get_legend().get_texts()]
+
+    assert "Bisecting KMeans" in legend_labels
+    plt.close(figure)

@@ -60,9 +60,9 @@ obtaining the documented datasets, run:
 
     bp-k-means-benchmark --config experiments/default.toml
 
-The command writes benchmark outputs to ``output`` and records the effective configuration in
-``output/experiment_config.json``. Benchmark results include elapsed time, WCSS statistics,
-cluster assignments, and the random seed used for the run.
+The command writes benchmark outputs to ``output/benchmark`` and records the effective
+configuration in ``output/benchmark/experiment_config.json``. Benchmark results include elapsed
+time, WCSS statistics, cluster assignments, and the random seed used for the run.
 
 Set ``skip_existing = true`` to resume a partial benchmark: combinations that already have a
 ``metadata.json`` output are skipped. It defaults to ``false``.
@@ -74,11 +74,15 @@ The two bisecting implementations can be controlled independently with
 ``include_bisecting_kmeans`` and ``include_precomputed_bisecting_kmeans``; both default to
 ``true``.
 
-To generate figures and aggregate tables from those outputs:
+To generate figures and aggregate tables from those outputs, which are written to
+``output/analysis``:
 
 .. code-block:: bash
 
     bp-k-means-analyze
+
+The analysis compares BP-KMeans initialized with k-means++ against standard Bisecting KMeans;
+other benchmark algorithms and initialization variants are excluded from the analysis outputs.
 
 Data provenance and licensing must be reviewed before redistributing datasets generated from
 OpenStreetMap or INE sources. See the documentation for the source URLs and processing steps.
