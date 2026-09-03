@@ -61,8 +61,8 @@ def cop_kmeans_by_label(
     y: "NDArray",
     k: int,
     max_iter: int = 300,
-    seed: int | np.random.Generator = 42,
     *,
+    seed: int | np.random.Generator,
     init_ensure_label: bool = True,
 ) -> tuple["NDArray", "NDArray"] | tuple[None, None]:
     """
@@ -131,9 +131,9 @@ class COPKMeans(BaseAlgo):
     def __init__(
         self,
         max_iter: int = 300,
-        seed: int | np.random.Generator = 42,
-        n_init: int = 10,
         *,
+        seed: int | np.random.Generator,
+        n_init: int,
         init_ensure_label: bool = True,
     ) -> None:
         """Initialize COP-KMeans.

@@ -25,19 +25,19 @@ class TestBasicBehavior:
     def test_returns_correct_shape(self, sample_data: tuple[np.ndarray, np.ndarray]) -> None:
         """Return one cluster label for each input point."""
         X, y = sample_data
-        labels = bp_kmeans(X, y, target_k=6, seed=42)
+        labels = bp_kmeans(X, y, target_k=6, seed=42, n_init=1, subsample_size=10)
         assert labels.shape == (X.shape[0],)
 
     def test_correct_number_of_clusters(self, sample_data: tuple[np.ndarray, np.ndarray]) -> None:
         """Return the requested number of clusters."""
         X, y = sample_data
-        labels = bp_kmeans(X, y, target_k=6, seed=42)
+        labels = bp_kmeans(X, y, target_k=6, seed=42, n_init=1, subsample_size=10)
         assert len(np.unique(labels)) == 6
 
     def test_label_consistency_constraint(self, sample_data: tuple[np.ndarray, np.ndarray]) -> None:
         """All points in the same cluster must share the same original label."""
         X, y = sample_data
-        labels = bp_kmeans(X, y, target_k=9, seed=42)
+        labels = bp_kmeans(X, y, target_k=9, seed=42, n_init=1, subsample_size=10)
         for cluster_id in np.unique(labels):
             cluster_labels = y[labels == cluster_id]
             assert len(np.unique(cluster_labels)) == 1
@@ -45,22 +45,24 @@ class TestBasicBehavior:
     def test_target_k_equals_n_labels(self, sample_data: tuple[np.ndarray, np.ndarray]) -> None:
         """Allow one cluster per original label."""
         X, y = sample_data
-        labels = bp_kmeans(X, y, target_k=3, seed=42)
+        labels = bp_kmeans(X, y, target_k=3, seed=42, n_init=1, subsample_size=10)
         assert len(np.unique(labels)) == 3
 
     def test_target_k_equals_n_samples(self, sample_data: tuple[np.ndarray, np.ndarray]) -> None:
         """Allow one cluster per input point."""
         X, y = sample_data
-        labels = bp_kmeans(X, y, target_k=X.shape[0], seed=42)
+        labels = bp_kmeans(X, y, target_k=X.shape[0], seed=42, n_init=1, subsample_size=10)
         assert len(np.unique(labels)) == X.shape[0]
 
     def test_raises_on_invalid_target_k(self, sample_data: tuple[np.ndarray, np.ndarray]) -> None:
         """Reject target sizes outside the label-constrained feasible range."""
         X, y = sample_data
         with pytest.raises(ValueError, match="target_k cannot be larger"):
-            bp_kmeans(X, y, target_k=X.shape[0] + 1, seed=42)
+            bp_kmeans(
+                X, y, target_k=X.shape[0] + 1, seed=42, n_init=1, subsample_size=10
+            )
         with pytest.raises(ValueError, match="target_k cannot be smaller"):
-            bp_kmeans(X, y, target_k=2, seed=42)  # fewer than n_labels
+            bp_kmeans(X, y, target_k=2, seed=42, n_init=1, subsample_size=10)
 
 
 class TestMetrics:
@@ -81,7 +83,15 @@ class TestMetrics:
     ) -> None:
         """Produce valid label-constrained clusters for every ranking."""
         X, y = sample_data
-        labels = bp_kmeans(X, y, target_k=9, seed=42, ranking_metric=ranking_metric)
+        labels = bp_kmeans(
+            X,
+            y,
+            target_k=9,
+            seed=42,
+            n_init=1,
+            subsample_size=10,
+            ranking_metric=ranking_metric,
+        )
         assert labels.shape == (X.shape[0],)
         assert len(np.unique(labels)) == 9
         # Label consistency
@@ -98,7 +108,9 @@ class TestInitStrategies:
     ) -> None:
         """Produce valid label-constrained clusters for every initializer."""
         X, y = sample_data
-        labels = bp_kmeans(X, y, target_k=9, seed=42, init_strategy=init)
+        labels = bp_kmeans(
+            X, y, target_k=9, seed=42, n_init=1, subsample_size=10, init_strategy=init
+        )
         assert labels.shape == (X.shape[0],)
         assert len(np.unique(labels)) == 9
         for cluster_id in np.unique(labels):
@@ -123,6 +135,8 @@ class TestAllCombinations:
             y,
             target_k=6,
             seed=42,
+            n_init=1,
+            subsample_size=10,
             ranking_metric=ranking_metric,
             init_strategy=init,
         )
@@ -140,14 +154,14 @@ class TestEdgeCases:
         rng = np.random.default_rng(42)
         X = rng.normal(size=(20, 2))
         y = np.zeros(20, dtype=int)
-        labels = bp_kmeans(X, y, target_k=5, seed=42)
+        labels = bp_kmeans(X, y, target_k=5, seed=42, n_init=1, subsample_size=10)
         assert len(np.unique(labels)) == 5
 
     def test_two_points_per_label(self) -> None:
         """Handle labels containing exactly two points."""
         X = np.array([[0, 0], [1, 1], [5, 5], [6, 6]], dtype=float)
         y = np.array([0, 0, 1, 1])
-        labels = bp_kmeans(X, y, target_k=4, seed=42)
+        labels = bp_kmeans(X, y, target_k=4, seed=42, n_init=1, subsample_size=10)
         assert len(np.unique(labels)) == 4
 
     def test_string_labels(self) -> None:
@@ -155,5 +169,5 @@ class TestEdgeCases:
         rng = np.random.default_rng(42)
         X = rng.normal(size=(30, 2))
         y = np.array(["cat"] * 10 + ["dog"] * 10 + ["bird"] * 10)
-        labels = bp_kmeans(X, y, target_k=6, seed=42)
+        labels = bp_kmeans(X, y, target_k=6, seed=42, n_init=1, subsample_size=10)
         assert len(np.unique(labels)) == 6

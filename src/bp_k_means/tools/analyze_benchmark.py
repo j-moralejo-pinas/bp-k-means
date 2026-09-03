@@ -7,10 +7,7 @@ from typing import Any, cast
 
 import pandas as pd
 
-from bp_k_means.tools.benchmark_analysis.data import (
-    DATA_DIR,
-    OUTPUT_DIR,
-    RESULTS_DIR,
+from bp_k_means.benchmark_analysis.data import (
     SIZE_BIN_LABELS,
     add_dataset_context,
     aggregate_relative_metrics,
@@ -19,12 +16,12 @@ from bp_k_means.tools.benchmark_analysis.data import (
     load_hac_strength_metadata,
     select_bp_vs_bisecting_kmeans,
 )
-from bp_k_means.tools.benchmark_analysis.plots import (
+from bp_k_means.benchmark_analysis.plots import (
     plot_by_k_multiplier,
     plot_by_size_bin,
     plot_overall,
 )
-from bp_k_means.tools.benchmark_analysis.plotting import (
+from bp_k_means.benchmark_analysis.plotting import (
     alg_label,
     build_color_map,
     build_fill_map,
@@ -33,11 +30,12 @@ from bp_k_means.tools.benchmark_analysis.plotting import (
     build_marker_map,
     set_show_titles,
 )
-from bp_k_means.tools.benchmark_analysis.special import (
+from bp_k_means.benchmark_analysis.special import (
     SPECIAL_METRICS,
     analyze_special_metric,
     bp_algorithm_from_spec,
 )
+from bp_k_means.main import ExperimentConfig, load_config
 from bp_k_means.utils.logging import logger
 
 # ---------------------------------------------------------------------------
@@ -142,9 +140,9 @@ def analyze_grouping(
 
 def analyze_hac_strength_benchmark(
     *,
-    output_dir: Path = OUTPUT_DIR,
-    data_dir: Path = DATA_DIR,
-    results_dir: Path = RESULTS_DIR,
+    output_dir: Path,
+    data_dir: Path,
+    results_dir: Path,
     show_titles: bool = False,
 ) -> None:
     """Analyze HAC-strength rows for BP-KMeans++ and standard Bisecting KMeans."""
@@ -242,22 +240,10 @@ def parse_args() -> argparse.Namespace:
     """Parse command-line options for benchmark analysis."""
     parser = argparse.ArgumentParser(description="Analyze benchmark results.")
     parser.add_argument(
-        "--output-dir",
+        "--config",
         type=Path,
-        default=OUTPUT_DIR,
-        help=f"Benchmark result directory (default: {OUTPUT_DIR}).",
-    )
-    parser.add_argument(
-        "--data-dir",
-        type=Path,
-        default=DATA_DIR,
-        help=f"Dataset directory (default: {DATA_DIR}).",
-    )
-    parser.add_argument(
-        "--results-dir",
-        type=Path,
-        default=RESULTS_DIR,
-        help=f"Analysis output directory (default: {RESULTS_DIR}).",
+        default=Path("experiments/default.toml"),
+        help="TOML configuration file (default: experiments/default.toml).",
     )
     parser.add_argument(
         "--special-bp-combinations",
@@ -286,16 +272,17 @@ def parse_args() -> argparse.Namespace:
 
 
 def main(
+    config: ExperimentConfig,
     special_bp_combinations: dict[int, str] | None = None,
     *,
-    output_dir: Path = OUTPUT_DIR,
-    data_dir: Path = DATA_DIR,
-    results_dir: Path = RESULTS_DIR,
     show_titles: bool = False,
 ) -> None:
     """Run the complete benchmark aggregation and plotting pipeline."""
     set_show_titles(show_titles=show_titles)
 
+    output_dir = config.benchmark_output_dir
+    data_dir = config.datasets_dir
+    results_dir = config.analysis_output_dir
     base_results_dir = results_dir / "base"
     base_results_dir.mkdir(parents=True, exist_ok=True)
 
@@ -391,13 +378,16 @@ def main(
 def cli() -> None:
     """Run the benchmark analysis command-line interface."""
     args = parse_args()
-    main(
-        special_bp_combinations=args.special_bp_combinations,
-        output_dir=args.output_dir,
-        data_dir=args.data_dir,
-        results_dir=args.results_dir,
-        show_titles=args.show_titles,
-    )
+    try:
+        config = load_config(args.config)
+        main(
+            config,
+            special_bp_combinations=args.special_bp_combinations,
+            show_titles=args.show_titles,
+        )
+    except (OSError, TypeError, ValueError) as exc:
+        msg = f"error: {exc}"
+        raise SystemExit(msg) from exc
 
 
 if __name__ == "__main__":

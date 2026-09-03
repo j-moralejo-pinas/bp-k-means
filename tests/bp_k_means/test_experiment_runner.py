@@ -21,8 +21,24 @@ def test_public_api_exports_algorithm_and_version() -> None:
 
 def test_cop_kmeans_is_available_as_an_opt_in_algorithm() -> None:
     """Keep COP-KMeans available without changing the default benchmark suite."""
-    default_algorithms = _build_algorithms(n_inits=(1,))
-    opt_in_algorithms = _build_algorithms(n_inits=(1,), include_cop_kmeans=True)
+    default_algorithms = _build_algorithms(
+        seed=42,
+        n_inits=(1,),
+        subsample_size=10,
+        include_cop_kmeans=False,
+        include_hac=True,
+        include_bisecting_kmeans=True,
+        include_precomputed_bisecting_kmeans=True,
+    )
+    opt_in_algorithms = _build_algorithms(
+        seed=42,
+        n_inits=(1,),
+        subsample_size=10,
+        include_cop_kmeans=True,
+        include_hac=True,
+        include_bisecting_kmeans=True,
+        include_precomputed_bisecting_kmeans=True,
+    )
 
     assert not any(name == "COP-KMeans" for name, _ in default_algorithms)
     cop_algorithms = [algo for name, algo in opt_in_algorithms if name == "COP-KMeans"]
@@ -32,7 +48,15 @@ def test_cop_kmeans_is_available_as_an_opt_in_algorithm() -> None:
 
 def test_hac_can_be_excluded_from_the_algorithm_suite() -> None:
     """Honor the HAC opt-out used by the benchmark configuration."""
-    algorithms = _build_algorithms(n_inits=(1,), include_hac=False)
+    algorithms = _build_algorithms(
+        seed=42,
+        n_inits=(1,),
+        subsample_size=10,
+        include_cop_kmeans=False,
+        include_hac=False,
+        include_bisecting_kmeans=True,
+        include_precomputed_bisecting_kmeans=True,
+    )
 
     assert not any(name == "HAC Ward (NNC)" for name, _ in algorithms)
 
@@ -40,7 +64,11 @@ def test_hac_can_be_excluded_from_the_algorithm_suite() -> None:
 def test_bisecting_kmeans_algorithms_are_configurable() -> None:
     """Honor independent include switches for the bisecting implementations."""
     algorithms = _build_algorithms(
+        seed=42,
         n_inits=(1,),
+        subsample_size=10,
+        include_cop_kmeans=False,
+        include_hac=True,
         include_bisecting_kmeans=False,
         include_precomputed_bisecting_kmeans=False,
     )
@@ -55,7 +83,8 @@ def test_load_config_resolves_paths_relative_to_config(tmp_path: Path) -> None:
     config_path.write_text(
         """[benchmark]
 datasets_dir = "datasets"
-output_dir = "results"
+benchmark_output_dir = "results/benchmark"
+analysis_output_dir = "results/analysis"
 seed = 123
 k_multipliers = [1.5]
 n_inits = [1]
@@ -65,7 +94,10 @@ run_hac_strength = true
 hac_strength_multiplier = 0.75
 run_special = false
 include_cop_kmeans = true
+include_hac = true
 skip_existing = true
+include_bisecting_kmeans = true
+include_precomputed_bisecting_kmeans = true
 """,
         encoding="utf-8",
     )
@@ -73,7 +105,8 @@ skip_existing = true
     config = load_config(config_path)
 
     assert config.datasets_dir == (tmp_path / "datasets").resolve()
-    assert config.output_dir == (tmp_path / "results").resolve()
+    assert config.benchmark_output_dir == (tmp_path / "results/benchmark").resolve()
+    assert config.analysis_output_dir == (tmp_path / "results/analysis").resolve()
     assert config.seed == 123
     assert config.k_multipliers == (1.5,)
     assert config.n_inits == (1,)
@@ -96,13 +129,21 @@ def test_experiment_records_seed_and_repeats_deterministically(tmp_path: Path) -
     ).to_parquet(datasets_dir / "toy_nodes.parquet", index=False)
     config = ExperimentConfig(
         datasets_dir=datasets_dir,
-        output_dir=output_dir,
+        benchmark_output_dir=output_dir / "benchmark",
+        analysis_output_dir=output_dir / "analysis",
         seed=123,
         k_multipliers=(1.5,),
         n_inits=(1,),
         subsample_size=4,
+        run_regular=True,
+        run_hac_strength=False,
+        hac_strength_multiplier=0.75,
         run_special=False,
         include_cop_kmeans=True,
+        include_hac=True,
+        skip_existing=True,
+        include_bisecting_kmeans=True,
+        include_precomputed_bisecting_kmeans=True,
     )
 
     run_experiment(config, config_name="experiment.toml")

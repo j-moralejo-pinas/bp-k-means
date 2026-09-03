@@ -705,146 +705,146 @@ if __name__ == "__main__":
     )
 
     # Very small size
-    # build_dataset_for_place(
-    #     place="Ajalvir, Madrid, Spain",
-    #     outfile="ajalvir_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "28",
-    #         "CMUN": "002",
-    #     },
-    # )
-    # build_dataset_for_place(
-    #     place="Torrelaguna, Madrid, Spain",
-    #     outfile="torrelaguna_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "28",
-    #         "CMUN": "151",
-    #     },
-    # )
-    # build_dataset_for_place(
-    #     place="Colmenar de Oreja, Madrid, Spain",
-    #     outfile="colmenar_de_oreja_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "28",
-    #         "CMUN": "043",
-    #     },
-    # )
+    build_dataset_for_place(
+        place="Ajalvir, Madrid, Spain",
+        outfile="ajalvir_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "28",
+            "CMUN": "002",
+        },
+    )
+    build_dataset_for_place(
+        place="Torrelaguna, Madrid, Spain",
+        outfile="torrelaguna_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "28",
+            "CMUN": "151",
+        },
+    )
+    build_dataset_for_place(
+        place="Colmenar de Oreja, Madrid, Spain",
+        outfile="colmenar_de_oreja_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "28",
+            "CMUN": "043",
+        },
+    )
 
-    # # Small size
-    # build_dataset_for_place(
-    #     place="Becerril de la Sierra, Madrid, Spain",
-    #     outfile="becerril_de_la_sierra_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "28",
-    #         "CMUN": "018",
-    #     },
-    # )
-    # build_dataset_for_place(
-    #     place="Cercedilla, Madrid, Spain",
-    #     outfile="cercedilla_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "28",
-    #         "CMUN": "038",
-    #     },
-    # )
-    # build_dataset_for_place(
-    #     place="Manzanares el Real, Madrid, Spain",
-    #     outfile="manzanares_el_real_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "28",
-    #         "CMUN": "082",
-    #     },
-    # )
+    # Small size
+    build_dataset_for_place(
+        place="Becerril de la Sierra, Madrid, Spain",
+        outfile="becerril_de_la_sierra_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "28",
+            "CMUN": "018",
+        },
+    )
+    build_dataset_for_place(
+        place="Cercedilla, Madrid, Spain",
+        outfile="cercedilla_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "28",
+            "CMUN": "038",
+        },
+    )
+    build_dataset_for_place(
+        place="Manzanares el Real, Madrid, Spain",
+        outfile="manzanares_el_real_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "28",
+            "CMUN": "082",
+        },
+    )
 
-    # # Medium size
-    # build_dataset_for_place(
-    #     place="Aranjuez, Madrid, Spain",
-    #     outfile="aranjuez_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "28",
-    #         "CMUN": "013",
-    #     },
-    # )
-    # build_dataset_for_place(
-    #     place="Segovia, Castile and León, Spain",
-    #     outfile="segovia_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "40",
-    #         "CMUN": "194",
-    #     },
-    # )
-    # build_dataset_for_place(
-    #     place="Cáceres, Extremadura, Spain",
-    #     outfile="caceres_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "10",
-    #         "CMUN": "037",
-    #     },
-    # )
+    # Medium size
+    build_dataset_for_place(
+        place="Aranjuez, Madrid, Spain",
+        outfile="aranjuez_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "28",
+            "CMUN": "013",
+        },
+    )
+    build_dataset_for_place(
+        place="Segovia, Castile and León, Spain",
+        outfile="segovia_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "40",
+            "CMUN": "194",
+        },
+    )
+    build_dataset_for_place(
+        place="Cáceres, Extremadura, Spain",
+        outfile="caceres_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "10",
+            "CMUN": "037",
+        },
+    )
 
-    # # Large size
-    # build_dataset_for_place(
-    #     place="Gijón, Asturias, Spain",
-    #     outfile="gijon_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "33",
-    #         "CMUN": "024",
-    #     },
-    # )
-    # build_dataset_for_place(
-    #     place="Valladolid, Castile and León, Spain",
-    #     outfile="valladolid_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "47",
-    #         "CMUN": "186",
-    #     },
-    # )
-    # build_dataset_for_place(
-    #     place="Salamanca, Castile and León, Spain",
-    #     outfile="salamanca_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "37",
-    #         "CMUN": "274",
-    #     },
-    # )
+    # Large size
+    build_dataset_for_place(
+        place="Gijón, Asturias, Spain",
+        outfile="gijon_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "33",
+            "CMUN": "024",
+        },
+    )
+    build_dataset_for_place(
+        place="Valladolid, Castile and León, Spain",
+        outfile="valladolid_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "47",
+            "CMUN": "186",
+        },
+    )
+    build_dataset_for_place(
+        place="Salamanca, Castile and León, Spain",
+        outfile="salamanca_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "37",
+            "CMUN": "274",
+        },
+    )
 
-    # # Very large size
-    # build_dataset_for_place(
-    #     place="Madrid, Community of Madrid, Spain",
-    #     outfile="madrid_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "28",
-    #         "CMUN": "079",
-    #     },
-    # )
-    # build_dataset_for_place(
-    #     place="Valencia, Valencian Community, Spain",
-    #     outfile="valencia_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "46",
-    #         "CMUN": "250",
-    #     },
-    # )
-    # build_dataset_for_place(
-    #     place="Barcelona, Catalonia, Spain",
-    #     outfile="barcelona_osm_drive_nodes.parquet",
-    #     network_type="drive",
-    #     filter_by_codes={
-    #         "CPRO": "08",
-    #         "CMUN": "019",
-    #     },
-    # )
+    # Very large size
+    build_dataset_for_place(
+        place="Madrid, Community of Madrid, Spain",
+        outfile="madrid_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "28",
+            "CMUN": "079",
+        },
+    )
+    build_dataset_for_place(
+        place="Valencia, Valencian Community, Spain",
+        outfile="valencia_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "46",
+            "CMUN": "250",
+        },
+    )
+    build_dataset_for_place(
+        place="Barcelona, Catalonia, Spain",
+        outfile="barcelona_osm_drive_nodes.parquet",
+        network_type="drive",
+        filter_by_codes={
+            "CPRO": "08",
+            "CMUN": "019",
+        },
+    )

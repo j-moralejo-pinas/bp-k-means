@@ -11,9 +11,6 @@ import pyarrow.parquet as pq
 
 from bp_k_means.utils.logging import logger
 
-OUTPUT_DIR = Path("output/benchmark")
-RESULTS_DIR = Path("output/analysis")
-DATA_DIR = Path("data/datasets")
 HAC_STRENGTH_BENCHMARK_TYPE = "hac_strength"
 REGULAR_DATASET_EXCLUDE_PATTERNS = ("com_madrid", "castile_and_leon")
 
@@ -73,7 +70,7 @@ def _is_regular_dataset(dataset: str) -> bool:
     return not any(pattern in normalized for pattern in REGULAR_DATASET_EXCLUDE_PATTERNS)
 
 
-def load_all_metadata(output_dir: Path = OUTPUT_DIR) -> pd.DataFrame:
+def load_all_metadata(output_dir: Path) -> pd.DataFrame:
     """Load regular benchmark metadata files into one DataFrame."""
     rows = [
         _base_metadata_row(meta)
@@ -84,7 +81,7 @@ def load_all_metadata(output_dir: Path = OUTPUT_DIR) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def load_hac_strength_metadata(output_dir: Path = OUTPUT_DIR) -> pd.DataFrame:
+def load_hac_strength_metadata(output_dir: Path) -> pd.DataFrame:
     """Load only metadata rows produced by the HAC-strength benchmark."""
     rows = []
     for meta in read_metadata_files(output_dir):
@@ -102,7 +99,7 @@ def load_hac_strength_metadata(output_dir: Path = OUTPUT_DIR) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def load_dataset_sizes(data_dir: Path = DATA_DIR) -> dict[str, int]:
+def load_dataset_sizes(data_dir: Path) -> dict[str, int]:
     """Read the number of rows from each benchmark dataset file."""
     sizes: dict[str, int] = {}
     for path in data_dir.glob("*nodes.parquet"):
@@ -134,7 +131,7 @@ def select_bp_vs_bisecting_kmeans(df: pd.DataFrame) -> pd.DataFrame:
     return parsed[is_bisecting | is_kpp_bp].copy()
 
 
-def add_dataset_context(df: pd.DataFrame, data_dir: Path = DATA_DIR) -> pd.DataFrame:
+def add_dataset_context(df: pd.DataFrame, data_dir: Path) -> pd.DataFrame:
     """Add dataset sizes, inferred label counts, and publication size bins."""
     result = df.copy()
     result["n_instances"] = result["dataset"].map(load_dataset_sizes(data_dir).get)

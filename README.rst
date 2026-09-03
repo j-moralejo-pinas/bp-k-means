@@ -44,7 +44,7 @@ Run boundary-preserving clustering with a pre-existing label for each point:
 
     X = np.array([[0.0, 0.0], [1.0, 0.0], [5.0, 5.0], [6.0, 5.0]])
     y = np.array(["left", "left", "right", "right"])
-    clusters = bp_kmeans(X, y, target_k=4, seed=42)
+    clusters = bp_kmeans(X, y, target_k=4, seed=42, n_init=1, subsample_size=10)
 
 The returned array contains one cluster assignment per row of ``X``. Clusters are
 label-pure: points with different values in ``y`` are never assigned to the same cluster.
@@ -60,26 +60,32 @@ obtaining the documented datasets, run:
 
     bp-k-means-benchmark --config experiments/default.toml
 
-The command writes benchmark outputs to ``output/benchmark`` and records the effective
-configuration in ``output/benchmark/experiment_config.json``. Benchmark results include elapsed
-time, WCSS statistics, cluster assignments, and the random seed used for the run.
+The configured benchmark output directory receives the benchmark results and the effective
+configuration manifest. With the default configuration these are ``output/benchmark`` and
+``output/benchmark/experiment_config.json``. Benchmark results include elapsed time, WCSS
+statistics, cluster assignments, and the random seed used for the run.
+
+The benchmark and analysis paths, along with all benchmark parameters, must be specified in the
+TOML configuration; the checked-in ``experiments/default.toml`` provides the standard values.
 
 Set ``skip_existing = true`` to resume a partial benchmark: combinations that already have a
-``metadata.json`` output are skipped. It defaults to ``false``.
+``metadata.json`` output are skipped.
 
 COP-KMeans is available as an opt-in comparator; set ``include_cop_kmeans = true`` in the TOML
 configuration when it should be included.
 
 The two bisecting implementations can be controlled independently with
-``include_bisecting_kmeans`` and ``include_precomputed_bisecting_kmeans``; both default to
-``true``.
+``include_bisecting_kmeans`` and ``include_precomputed_bisecting_kmeans``.
 
-To generate figures and aggregate tables from those outputs, which are written to
-``output/analysis``:
+To generate figures and aggregate tables from those outputs, which are written to the configured
+analysis output directory (``output/analysis`` by default):
 
 .. code-block:: bash
 
     bp-k-means-analyze
+
+The analysis command reads the same configuration file to locate the dataset, benchmark, and
+analysis directories. Use ``--config`` when running it with a different experiment file.
 
 The analysis compares BP-KMeans initialized with k-means++ against standard Bisecting KMeans;
 other benchmark algorithms and initialization variants are excluded from the analysis outputs.

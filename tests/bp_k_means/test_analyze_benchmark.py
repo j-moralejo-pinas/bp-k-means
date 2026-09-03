@@ -6,9 +6,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from bp_k_means.benchmark_analysis.data import select_bp_vs_bisecting_kmeans
+from bp_k_means.benchmark_analysis.plotting import add_scatter_legends
 from bp_k_means.tools.analyze_benchmark import compute_relative_metrics, load_all_metadata
-from bp_k_means.tools.benchmark_analysis.data import select_bp_vs_bisecting_kmeans
-from bp_k_means.tools.benchmark_analysis.plotting import add_scatter_legends
 
 
 def test_regular_metadata_excludes_special_and_hac_benchmarks(tmp_path: Path) -> None:

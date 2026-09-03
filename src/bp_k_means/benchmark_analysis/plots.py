@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from .data import RESULTS_DIR, SIZE_BIN_LABELS
-from .plotting import (
+from bp_k_means.benchmark_analysis.data import SIZE_BIN_LABELS
+from bp_k_means.benchmark_analysis.plotting import (
     PLOT_OPTIONS,
     add_scatter_legends,
     alg_label,
@@ -30,11 +30,11 @@ from .plotting import (
 
 def plot_overall(
     overall: pd.DataFrame,
+    save_dir: Path,
     color_map: dict[str, tuple] | None = None,
     marker_map: dict[str, str] | None = None,
     fill_map: dict[str, bool] | None = None,
     legend_info: dict | None = None,
-    save_dir: Path = RESULTS_DIR,
 ) -> None:
     """Create aggregate bar, line, scatter, and Pareto plots."""
     overall = cast("Any", overall)
@@ -326,11 +326,11 @@ def _plot_by_group(
 
 def plot_by_k_multiplier(
     by_k_mult: pd.DataFrame,
+    save_dir: Path,
     color_map: dict[str, tuple] | None = None,
     marker_map: dict[str, str] | None = None,
     fill_map: dict[str, bool] | None = None,
     legend_info: dict | None = None,
-    save_dir: Path = RESULTS_DIR,
 ) -> None:
     """Create aggregate plots grouped by requested cluster multiplier."""
     groups = sorted(by_k_mult["k_multiplier"].unique())
@@ -354,11 +354,11 @@ def plot_by_k_multiplier(
 
 def plot_by_size_bin(
     by_size: pd.DataFrame,
+    save_dir: Path,
     color_map: dict[str, tuple] | None = None,
     marker_map: dict[str, str] | None = None,
     fill_map: dict[str, bool] | None = None,
     legend_info: dict | None = None,
-    save_dir: Path = RESULTS_DIR,
 ) -> None:
     """Create aggregate plots grouped by dataset size bin."""
     groups = [label for label in SIZE_BIN_LABELS if label in by_size["size_bin"].to_numpy()]

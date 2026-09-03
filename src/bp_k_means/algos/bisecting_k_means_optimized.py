@@ -156,8 +156,8 @@ def bisecting_kmeans_by_label_optimized(
     X: "NDArray",
     y: "NDArray",
     target_k: int,
-    seed: int | np.random.Generator = 42,
-    n_init: int = 10,
+    seed: int | np.random.Generator,
+    n_init: int,
     *,
     use_wcss_per_cluster: bool = True,
 ) -> "NDArray":
@@ -341,8 +341,8 @@ def bisecting_kmeans_by_label_optimized_no_refine(
     X: "NDArray",
     y: "NDArray",
     target_k: int,
-    seed: int | np.random.Generator = 42,
-    n_init: int = 10,
+    seed: int | np.random.Generator,
+    n_init: int,
 ) -> "NDArray":
     """
     Divisive hierarchical clustering (bisecting k-means) with a label constraint.
@@ -490,8 +490,8 @@ class BisectingKMeans(BaseAlgo):
 
     def __init__(
         self,
-        seed: int | np.random.Generator = 42,
-        n_init: int = 10,
+        seed: int | np.random.Generator,
+        n_init: int,
         *,
         use_wcss_per_cluster: bool = True,
     ) -> None:

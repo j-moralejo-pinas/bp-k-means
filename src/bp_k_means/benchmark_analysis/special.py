@@ -11,15 +11,12 @@ import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 
-from bp_k_means.utils.logging import logger
-
-from .data import (
+from bp_k_means.benchmark_analysis.data import (
     HAC_STRENGTH_BENCHMARK_TYPE,
-    OUTPUT_DIR,
     read_metadata_files,
     select_bp_vs_bisecting_kmeans,
 )
-from .plotting import (
+from bp_k_means.benchmark_analysis.plotting import (
     add_scatter_legends,
     alg_label,
     apply_plain_tick_format,
@@ -29,6 +26,7 @@ from .plotting import (
     save_with_log_variant,
     set_title,
 )
+from bp_k_means.utils.logging import logger
 
 EXPECTED_COMBINATION_PARTS = 3
 TIME_SHORT_LIMIT = 10
@@ -58,7 +56,7 @@ SPECIAL_METRICS = [
 def _load_special_metric_metadata(
     dataset_prefix: str,
     metric_keys: list[str],
-    output_dir: Path = OUTPUT_DIR,
+    output_dir: Path,
 ) -> pd.DataFrame:
     """Scan output/ for special metric metadata rows containing all requested keys."""
     rows = []
@@ -418,7 +416,7 @@ def analyze_special_metric(
     fill_map: dict[str, bool] | None = None,
     legend_info: dict | None = None,
     comparison_bp_algorithms: dict[int, str] | None = None,
-    output_dir: Path = OUTPUT_DIR,
+    output_dir: Path,
 ) -> None:
     """
     Analyze special metrics in absolute terms per algorithm x n_init.

@@ -12,8 +12,8 @@ class BaseAlgo(ABC):
 
     def __init__(
         self,
-        seed: int | np.random.Generator = 42,
-        n_init: int = 1,
+        seed: int | np.random.Generator,
+        n_init: int,
     ) -> None:
         """Initialize common algorithm settings.
 

@@ -19,9 +19,6 @@ from bp_k_means.algos.precomputed_bisecting_k_means_optimized import (
 from bp_k_means.utils.logging import logger
 from bp_k_means.utils.metrics import overall_wcss
 
-OUTPUT_DIR = Path("output/benchmark")
-DEFAULT_K_MULTIPLIERS = (1.5, 2.0, 4.0)
-DEFAULT_N_INITS = (1, 2, 4, 8, 16, 32)
 REGULAR_BENCHMARK_DATASET_EXCLUDE_PATTERNS = ("com_madrid", "castile_and_leon")
 
 
@@ -114,9 +111,9 @@ def _save_run_outputs(
     duration: float,
     wcss: float,
     *,
-    output_dir: Path = OUTPUT_DIR,
+    output_dir: Path,
     benchmark_type: str = "regular",
-    seed: int | None = None,
+    seed: int,
     extra_metadata: dict | None = None,
     run_name: str | None = None,
 ) -> None:
@@ -147,8 +144,7 @@ def _save_run_outputs(
         "wcss_per_cluster": _wcss_stats(wcss_cluster_arr),
         "wcss_per_label": _wcss_stats(wcss_label_arr),
     }
-    if seed is not None:
-        metadata["seed"] = seed
+    metadata["seed"] = seed
     if extra_metadata:
         metadata.update(extra_metadata)
     with (run_dir / "metadata.json").open("w") as f:
@@ -201,13 +197,13 @@ def _update_metadata(metadata_path: Path, updates: dict) -> None:
 
 def _build_algorithms(
     *,
-    seed: int = 42,
-    n_inits: list[int] | tuple[int, ...] = DEFAULT_N_INITS,
-    subsample_size: int = 10,
-    include_cop_kmeans: bool = False,
-    include_hac: bool = True,
-    include_bisecting_kmeans: bool = True,
-    include_precomputed_bisecting_kmeans: bool = True,
+    seed: int,
+    n_inits: list[int] | tuple[int, ...],
+    subsample_size: int,
+    include_cop_kmeans: bool,
+    include_hac: bool,
+    include_bisecting_kmeans: bool,
+    include_precomputed_bisecting_kmeans: bool,
 ) -> list[tuple[str, BaseAlgo]]:
     """Build the algorithms used by the benchmark suite."""
     algorithms: list[tuple[str, BaseAlgo]] = []
@@ -242,23 +238,23 @@ def _build_algorithms(
             )
 
     if include_hac:
-        algorithms.append(("HAC Ward (NNC)", HACWardNNC(seed=seed)))
+        algorithms.append(("HAC Ward (NNC)", HACWardNNC(seed=seed, n_init=n_inits[0])))
     return algorithms
 
 
 def run_benchmark(
-    datasets_dir: Path = Path("data/datasets"),
-    output_dir: Path = OUTPUT_DIR,
+    datasets_dir: Path,
+    output_dir: Path,
     *,
-    seed: int = 42,
-    k_multipliers: list[float] | tuple[float, ...] = DEFAULT_K_MULTIPLIERS,
-    n_inits: list[int] | tuple[int, ...] = DEFAULT_N_INITS,
-    subsample_size: int = 10,
-    include_cop_kmeans: bool = False,
-    include_hac: bool = True,
-    skip_existing: bool = False,
-    include_bisecting_kmeans: bool = True,
-    include_precomputed_bisecting_kmeans: bool = True,
+    seed: int,
+    k_multipliers: list[float] | tuple[float, ...],
+    n_inits: list[int] | tuple[int, ...],
+    subsample_size: int,
+    include_cop_kmeans: bool,
+    include_hac: bool,
+    skip_existing: bool,
+    include_bisecting_kmeans: bool,
+    include_precomputed_bisecting_kmeans: bool,
 ) -> None:
     """Run the regular benchmark suite for all available datasets."""
     dataset_files = list(datasets_dir.glob("*nodes.parquet"))
@@ -366,18 +362,18 @@ def run_benchmark(
 
 
 def run_hac_strength_benchmark(
-    cluster_multiplier: float = 1.5,
-    datasets_dir: Path = Path("data/datasets"),
-    output_dir: Path = OUTPUT_DIR,
+    datasets_dir: Path,
+    output_dir: Path,
     *,
-    seed: int = 42,
-    n_inits: list[int] | tuple[int, ...] = DEFAULT_N_INITS,
-    subsample_size: int = 10,
-    include_cop_kmeans: bool = False,
-    include_hac: bool = True,
-    skip_existing: bool = False,
-    include_bisecting_kmeans: bool = True,
-    include_precomputed_bisecting_kmeans: bool = True,
+    cluster_multiplier: float,
+    seed: int,
+    n_inits: list[int] | tuple[int, ...],
+    subsample_size: int,
+    include_cop_kmeans: bool,
+    include_hac: bool,
+    skip_existing: bool,
+    include_bisecting_kmeans: bool,
+    include_precomputed_bisecting_kmeans: bool,
 ) -> None:
     """
     Run the HAC-strength benchmark.
@@ -561,17 +557,17 @@ def _compute_distance_metrics(X: np.ndarray, labels: np.ndarray, y: np.ndarray) 
 
 
 def benchmark_com_madrid_avg_distance_to_centroid(
-    datasets_dir: Path = Path("data/datasets"),
-    output_dir: Path = OUTPUT_DIR,
+    datasets_dir: Path,
+    output_dir: Path,
     *,
-    seed: int = 42,
-    n_inits: list[int] | tuple[int, ...] = DEFAULT_N_INITS,
-    subsample_size: int = 10,
-    include_cop_kmeans: bool = False,
-    include_hac: bool = True,
-    skip_existing: bool = False,
-    include_bisecting_kmeans: bool = True,
-    include_precomputed_bisecting_kmeans: bool = True,
+    seed: int,
+    n_inits: list[int] | tuple[int, ...],
+    subsample_size: int,
+    include_cop_kmeans: bool,
+    include_hac: bool,
+    skip_existing: bool,
+    include_bisecting_kmeans: bool,
+    include_precomputed_bisecting_kmeans: bool,
 ) -> None:
     """Benchmark average distance to centroid at k=10000 for Community of Madrid."""
     dataset_path = datasets_dir / "com_madrid_osm_drive_nodes_split_split.parquet"
@@ -647,17 +643,17 @@ def benchmark_com_madrid_avg_distance_to_centroid(
 
 
 def benchmark_castile_leon_max_response_time(
-    datasets_dir: Path = Path("data/datasets"),
-    output_dir: Path = OUTPUT_DIR,
+    datasets_dir: Path,
+    output_dir: Path,
     *,
-    seed: int = 42,
-    n_inits: list[int] | tuple[int, ...] = DEFAULT_N_INITS,
-    subsample_size: int = 10,
-    include_cop_kmeans: bool = False,
-    include_hac: bool = True,
-    skip_existing: bool = False,
-    include_bisecting_kmeans: bool = True,
-    include_precomputed_bisecting_kmeans: bool = True,
+    seed: int,
+    n_inits: list[int] | tuple[int, ...],
+    subsample_size: int,
+    include_cop_kmeans: bool,
+    include_hac: bool,
+    skip_existing: bool,
+    include_bisecting_kmeans: bool,
+    include_precomputed_bisecting_kmeans: bool,
 ) -> None:
     """Benchmark: maximum response time at k=200 using province labels (Castile and León)."""
     dataset_path = datasets_dir / "castile_and_leon_osm_drive_nodes.parquet"

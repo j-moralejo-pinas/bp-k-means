@@ -19,8 +19,8 @@ def precomputed_bisecting_kmeans_by_label_optimized(  # noqa: C901 - candidate o
     X: "NDArray",
     y: "NDArray",
     target_k: int,
-    seed: int | np.random.Generator = 42,
-    n_init: int = 10,
+    seed: int | np.random.Generator,
+    n_init: int,
 ) -> "NDArray":
     """
     Bisecting K-Means with label constraint and precomputed splits (Refine Cluster strategy).
@@ -256,8 +256,8 @@ def precomputed_bisecting_kmeans_by_label_optimized_no_refine(  # noqa: C901, PL
     X: "NDArray",
     y: "NDArray",
     target_k: int,
-    seed: int | np.random.Generator = 42,
-    n_init: int = 10,
+    seed: int | np.random.Generator,
+    n_init: int,
 ) -> "NDArray":
     """
     Bisecting K-Means with label constraint and precomputed splits (No Refine strategy).

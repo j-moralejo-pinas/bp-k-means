@@ -111,7 +111,8 @@ def _build_init_centroids(
     target_pts: "NDArray | None" = None,
     max_wcss_idx: "int | None" = None,
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
-    subsample_size: int = 1000,
+    *,
+    subsample_size: int,
 ) -> "NDArray":
     """Build initial centroids for a k-means run with new_k clusters."""
     dim = pts.shape[1]
@@ -200,7 +201,8 @@ def _run_split(
     rng: np.random.Generator,
     init_strategy: InitStrategy,
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
-    subsample_size: int = 1000,
+    *,
+    subsample_size: int,
 ) -> "tuple[float, NDArray, NDArray]":
     """
     Run n_init k-means attempts with new_k clusters.
@@ -229,7 +231,7 @@ def _run_split(
             target_pts,
             max_wcss_idx,
             init_algorithm,
-            subsample_size,
+            subsample_size=subsample_size,
         )
         lbls, ctrs = kmeans(pts, new_k, seed=rng, init_centroids=init_centroids, X2=X2)
         counts = np.bincount(lbls, minlength=new_k)
@@ -247,13 +249,13 @@ def bp_kmeans(
     X: "NDArray",
     y: "NDArray",
     target_k: int,
-    seed: int | np.random.Generator = 42,
-    n_init: int = 10,
     *,
+    seed: int | np.random.Generator,
+    n_init: int,
+    subsample_size: int,
     ranking_metric: RankingMetric = RankingMetric.M_ERL,
     init_strategy: InitStrategy = InitStrategy.I_CRI,
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
-    subsample_size: int = 1000,
 ) -> "NDArray":
     """
     BP-KMeans: greedy label-constrained clustering.
@@ -372,7 +374,7 @@ def bp_kmeans(
             current_cluster_id,
             n_samples,
             init_algorithm,
-            subsample_size,
+            subsample_size=subsample_size,
         )
 
     # Build initial heap (max-heap via negation)
@@ -415,7 +417,7 @@ def bp_kmeans(
             rng,
             init_strategy,
             init_algorithm,
-            subsample_size,
+            subsample_size=subsample_size,
         )
 
         cluster_labels_per_label[selected_label] = best_labels
@@ -462,7 +464,8 @@ def _bp_kmeans_precomputed(
     current_cluster_id: int,
     n_samples: int,
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
-    subsample_size: int = 1000,
+    *,
+    subsample_size: int,
 ) -> "NDArray":
     """M_RL variant: precompute trial splits to rank by exact WCSS reduction."""
     pending_splits: dict[int, tuple[float, NDArray, NDArray]] = {}
@@ -489,7 +492,7 @@ def _bp_kmeans_precomputed(
             rng,
             init_strategy,
             init_algorithm,
-            subsample_size,
+            subsample_size=subsample_size,
         )
 
         reduction = wcss_per_label[label] - best_wcss
@@ -542,9 +545,10 @@ class BPKMeans(BaseAlgo):
         ranking_metric: RankingMetric = RankingMetric.M_ERL,
         init_strategy: InitStrategy = InitStrategy.I_CRI,
         init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
-        subsample_size: int = 1000,
-        seed: int | np.random.Generator = 42,
-        n_init: int = 10,
+        *,
+        subsample_size: int,
+        seed: int | np.random.Generator,
+        n_init: int,
     ) -> None:
         """Initialize a BP-KMeans algorithm.
 

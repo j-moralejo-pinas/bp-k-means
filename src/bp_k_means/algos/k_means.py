@@ -5,15 +5,13 @@ from numpy.typing import ArrayLike, NDArray
 
 from bp_k_means.algos.base_algo import BaseAlgo
 
-Array = NDArray
-
 
 def kmeans_plus_plus_init(
-    X: Array,
+    X: NDArray,
     k: int,
-    seed: int | np.random.Generator = 42,
-    existing_centroids: Array | None = None,
-) -> Array:
+    seed: int | np.random.Generator,
+    existing_centroids: NDArray | None = None,
+) -> NDArray:
     """Initialize centroids with the k-means++ strategy."""
     rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
     n, d = X.shape
@@ -64,12 +62,12 @@ def kmeans_plus_plus_init(
 
 
 def subsampled_kmeans_plus_plus_init(
-    X: Array,
+    X: NDArray,
     k: int,
     subsample_size: int,
-    seed: int | np.random.Generator = 42,
-    existing_centroids: Array | None = None,
-) -> Array:
+    seed: int | np.random.Generator,
+    existing_centroids: NDArray | None = None,
+) -> NDArray:
     """
     K-means++ initialisation on a random subsample of X.
 
@@ -88,11 +86,11 @@ def subsampled_kmeans_plus_plus_init(
 
 
 def random_init(
-    X: Array,
+    X: NDArray,
     k: int,
-    seed: int | np.random.Generator = 42,
-    existing_centroids: Array | None = None,
-) -> Array:
+    seed: int | np.random.Generator,
+    existing_centroids: NDArray | None = None,
+) -> NDArray:
     """
     Random initialisation: pick k distinct points uniformly at random.
 
@@ -129,13 +127,14 @@ def random_init(
 
 
 def kmeans(
-    X: Array,
+    X: NDArray,
     k: int,
     max_iter: int = 300,
-    seed: int | np.random.Generator = 42,
-    init_centroids: Array | None = None,
-    X2: Array | None = None,
-) -> tuple[Array, Array]:
+    *,
+    seed: int | np.random.Generator,
+    init_centroids: NDArray | None = None,
+    X2: NDArray | None = None,
+) -> tuple[NDArray, NDArray]:
     """Run Lloyd's k-means algorithm and return labels and centroids."""
     rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
     n, d = X.shape
@@ -214,8 +213,9 @@ class KMeans(BaseAlgo):
     def __init__(
         self,
         max_iter: int = 300,
-        seed: int | np.random.Generator = 42,
-        n_init: int = 1,
+        *,
+        seed: int | np.random.Generator,
+        n_init: int,
     ) -> None:
         """Initialize a k-means algorithm.
 

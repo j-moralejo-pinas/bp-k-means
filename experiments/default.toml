@@ -3,7 +3,8 @@
 
 [benchmark]
 datasets_dir = "../data/datasets"
-output_dir = "../output"
+benchmark_output_dir = "../output/benchmark"
+analysis_output_dir = "../output/analysis"
 seed = 42
 k_multipliers = [1.5, 2.0, 4.0]
 n_inits = [1, 2, 4, 8, 16, 32]
