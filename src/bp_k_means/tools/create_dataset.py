@@ -687,7 +687,7 @@ if __name__ == "__main__":
 
     build_dataset_for_place(
         place="Community of Madrid, Spain",
-        outfile="com_madrid_osm_drive_nodes_split.parquet",
+        outfile="com_madrid_osm_drive_nodes.parquet",
         network_type="drive",
         filter_by_codes={
             "CPRO": "28",

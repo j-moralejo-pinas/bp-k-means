@@ -9,6 +9,7 @@ from bp_k_means.algos.base_algo import BaseAlgo
 
 MIN_CLUSTER_SIZE = 2
 
+
 def _build_ward_queue(
     label_to_indices: dict[object, list[int]],
     centroids: dict[int, "np.ndarray"],
@@ -193,6 +194,44 @@ def _nearest_neighbor(
     return best_cluster
 
 
+def _next_nnc_merge(
+    cluster_ids: set[int],
+    sizes: dict[int, int],
+    centroids: dict[int, "np.ndarray"],
+) -> tuple[float, int, int]:
+    """Find a reciprocal nearest-neighbor merge for one label group."""
+    chain = [next(iter(cluster_ids))]
+    while True:
+        a = chain[-1]
+        best_b = _nearest_neighbor(a, cluster_ids, sizes, centroids)
+        if len(chain) >= MIN_CLUSTER_SIZE and best_b == chain[-2]:
+            return _ward_distance(a, best_b, sizes, centroids), a, best_b
+        chain.append(best_b)
+
+
+def _build_nnc_hierarchy(
+    cluster_ids: set[int],
+    sizes: dict[int, int],
+    centroids: dict[int, "np.ndarray"],
+    cluster_members: dict[int, list[int]],
+    next_cid: int,
+) -> tuple[list[tuple[float, int, int, int, int]], int]:
+    """Build one complete nearest-neighbor-chain hierarchy."""
+    active = set(cluster_ids)
+    depth = dict.fromkeys(cluster_ids, 0)
+    merge_events = []
+
+    while len(active) > 1:
+        cost, a, b = _next_nnc_merge(active, sizes, centroids)
+        cluster_members[next_cid] = cluster_members[a] + cluster_members[b]
+        depth[next_cid] = max(depth[a], depth[b]) + 1
+        merge_events.append((cost, depth[next_cid], a, b, next_cid))
+        _merge_nnc_clusters(a, b, next_cid, active, active, sizes, centroids)
+        next_cid += 1
+
+    return merge_events, next_cid
+
+
 def _merge_nnc_clusters(
     a: int,
     b: int,
@@ -209,30 +248,12 @@ def _merge_nnc_clusters(
     cluster_ids.remove(a)
     cluster_ids.remove(b)
     cluster_ids.add(new_id)
-    active.remove(a)
-    active.remove(b)
-    active.add(new_id)
+    if active is not cluster_ids:
+        active.remove(a)
+        active.remove(b)
+        active.add(new_id)
     del centroids[a], centroids[b]
     del sizes[a], sizes[b]
-
-
-def _assign_nnc_labels(
-    X: "np.ndarray",
-    y: "np.ndarray",
-    active: set[int],
-    label_clusters: dict[object, set[int]],
-    centroids: dict[int, "np.ndarray"],
-) -> "np.ndarray":
-    """Assign each point to the final nearest same-label centroid."""
-    cid_map = {cid: i for i, cid in enumerate(sorted(active))}
-    labels_final = np.empty(X.shape[0], dtype=int)
-    for i in range(X.shape[0]):
-        best = min(
-            (cid for cid in label_clusters[y[i]] if cid in active),
-            key=lambda cid: np.dot(X[i] - centroids[cid], X[i] - centroids[cid]),
-        )
-        labels_final[i] = cid_map[best]
-    return labels_final
 
 
 def hac_ward_nnc_by_label(X: "np.ndarray", y: "np.ndarray", target_k: int) -> "np.ndarray":
@@ -290,41 +311,22 @@ def hac_ward_nnc_by_label(X: "np.ndarray", y: "np.ndarray", target_k: int) -> "n
     for lbl in labels:
         label_clusters[lbl] = set(np.where(y == lbl)[0])
 
-    total_active = n
+    cluster_members = {i: [i] for i in range(n)}
+    merge_events = []
 
-    for lbl in labels:
-        chain = []
-        clusters = label_clusters[lbl]
+    for label in labels:
+        label_events, next_cid = _build_nnc_hierarchy(
+            label_clusters[label], sizes, centroids, cluster_members, next_cid,
+        )
+        merge_events.extend(label_events)
 
-        while total_active > target_k and len(clusters) > MIN_CLUSTER_SIZE - 1:
-            if not chain:
-                chain.append(next(iter(clusters)))
+    merge_events.sort()
+    for _cost, _depth, a, b, new_id in merge_events[: n - target_k]:
+        active.remove(a)
+        active.remove(b)
+        active.add(new_id)
 
-            while True:
-                a = chain[-1]
-
-                best_b = _nearest_neighbor(a, clusters, sizes, centroids)
-
-                # Extend chain
-                if len(chain) >= MIN_CLUSTER_SIZE and best_b == chain[-2]:
-                    # Reciprocal nearest neighbors -> merge
-                    break
-                chain.append(best_b)
-
-            b = chain.pop()
-            a = chain.pop()
-
-            new_id = next_cid
-            next_cid += 1
-            _merge_nnc_clusters(a, b, new_id, clusters, active, sizes, centroids)
-
-            total_active -= 1
-            chain.clear()
-
-            if total_active <= target_k:
-                break
-
-    return _assign_nnc_labels(X, y, active, label_clusters, centroids)
+    return _assign_ward_labels(active, cluster_members, n)
 
 
 class HACWard(BaseAlgo):

@@ -277,6 +277,13 @@ def precomputed_bisecting_kmeans_by_label_optimized_no_refine(  # noqa: C901, PL
     unique_labels, y_inverse = np.unique(y, return_inverse=True)
     n_labels = len(unique_labels)
 
+    if n_init < 1:
+        msg = "n_init must be >= 1"
+        raise ValueError(msg)
+    if target_k < n_labels:
+        msg = f"target_k={target_k} < number of labels={n_labels}."
+        raise ValueError(msg)
+
     if target_k == n_samples:
         return np.arange(n_samples)
 

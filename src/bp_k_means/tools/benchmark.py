@@ -204,23 +204,25 @@ def _build_algorithms(
     include_hac: bool,
     include_bisecting_kmeans: bool,
     include_precomputed_bisecting_kmeans: bool,
+    include_bp_kmeans: bool = True,
 ) -> list[tuple[str, BaseAlgo]]:
     """Build the algorithms used by the benchmark suite."""
     algorithms: list[tuple[str, BaseAlgo]] = []
 
-    for ranking_metric in RankingMetric:
-        for init in InitStrategy:
-            for n_init in n_inits:
-                name = f"BP-KMeans ({ranking_metric.name}, {init.name}, KMEANS_PLUS_PLUS)"
-                algorithm = BPKMeans(
-                    seed=seed,
-                    n_init=n_init,
-                    ranking_metric=ranking_metric,
-                    init_strategy=init,
-                    init_algorithm=InitAlgorithm.KMEANS_PLUS_PLUS,
-                    subsample_size=subsample_size,
-                )
-                algorithms.append((name, algorithm))
+    if include_bp_kmeans:
+        for ranking_metric in RankingMetric:
+            for init in InitStrategy:
+                for n_init in n_inits:
+                    name = f"BP-KMeans ({ranking_metric.name}, {init.name}, KMEANS_PLUS_PLUS)"
+                    algorithm = BPKMeans(
+                        seed=seed,
+                        n_init=n_init,
+                        ranking_metric=ranking_metric,
+                        init_strategy=init,
+                        init_algorithm=InitAlgorithm.KMEANS_PLUS_PLUS,
+                        subsample_size=subsample_size,
+                    )
+                    algorithms.append((name, algorithm))
 
     for n_init in n_inits:
         if include_cop_kmeans:
@@ -255,6 +257,7 @@ def run_benchmark(
     skip_existing: bool,
     include_bisecting_kmeans: bool,
     include_precomputed_bisecting_kmeans: bool,
+    include_bp_kmeans: bool = True,
 ) -> None:
     """Run the regular benchmark suite for all available datasets."""
     dataset_files = list(datasets_dir.glob("*nodes.parquet"))
@@ -272,6 +275,7 @@ def run_benchmark(
         include_hac=include_hac,
         include_bisecting_kmeans=include_bisecting_kmeans,
         include_precomputed_bisecting_kmeans=include_precomputed_bisecting_kmeans,
+        include_bp_kmeans=include_bp_kmeans,
     )
 
     for dataset_path in dataset_files:
@@ -374,6 +378,7 @@ def run_hac_strength_benchmark(
     skip_existing: bool,
     include_bisecting_kmeans: bool,
     include_precomputed_bisecting_kmeans: bool,
+    include_bp_kmeans: bool = True,
 ) -> None:
     """
     Run the HAC-strength benchmark.
@@ -401,6 +406,7 @@ def run_hac_strength_benchmark(
         include_hac=include_hac,
         include_bisecting_kmeans=include_bisecting_kmeans,
         include_precomputed_bisecting_kmeans=include_precomputed_bisecting_kmeans,
+        include_bp_kmeans=include_bp_kmeans,
     )
     output_dir = output_dir / "hac_strength"
     safe_multiplier = str(cluster_multiplier).replace(".", "_")
@@ -568,9 +574,10 @@ def benchmark_com_madrid_avg_distance_to_centroid(
     skip_existing: bool,
     include_bisecting_kmeans: bool,
     include_precomputed_bisecting_kmeans: bool,
+    include_bp_kmeans: bool = True,
 ) -> None:
     """Benchmark average distance to centroid at k=10000 for Community of Madrid."""
-    dataset_path = datasets_dir / "com_madrid_osm_drive_nodes_split_split.parquet"
+    dataset_path = datasets_dir / "com_madrid_osm_drive_nodes_split.parquet"
     if not dataset_path.exists():
         logger.error("Dataset not found: %s", dataset_path)
         return
@@ -588,6 +595,7 @@ def benchmark_com_madrid_avg_distance_to_centroid(
         include_hac=include_hac,
         include_bisecting_kmeans=include_bisecting_kmeans,
         include_precomputed_bisecting_kmeans=include_precomputed_bisecting_kmeans,
+        include_bp_kmeans=include_bp_kmeans,
     )
 
     for alg_name, algo in algorithms:
@@ -654,6 +662,7 @@ def benchmark_castile_leon_max_response_time(
     skip_existing: bool,
     include_bisecting_kmeans: bool,
     include_precomputed_bisecting_kmeans: bool,
+    include_bp_kmeans: bool = True,
 ) -> None:
     """Benchmark: maximum response time at k=200 using province labels (Castile and León)."""
     dataset_path = datasets_dir / "castile_and_leon_osm_drive_nodes.parquet"
@@ -683,6 +692,7 @@ def benchmark_castile_leon_max_response_time(
         include_hac=include_hac,
         include_bisecting_kmeans=include_bisecting_kmeans,
         include_precomputed_bisecting_kmeans=include_precomputed_bisecting_kmeans,
+        include_bp_kmeans=include_bp_kmeans,
     )
 
     for alg_name, algo in algorithms:

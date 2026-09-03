@@ -3,7 +3,7 @@
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -128,7 +128,7 @@ def select_bp_vs_bisecting_kmeans(df: pd.DataFrame) -> pd.DataFrame:
     is_bisecting = parsed["algorithm"] == "Bisecting KMeans"
     is_bp_kmeans = parsed["algorithm"].str.startswith("BP-KMeans")
     is_kpp_bp = is_bp_kmeans & (parsed["init_algo"] == "KMEANS_PLUS_PLUS")
-    return parsed[is_bisecting | is_kpp_bp].copy()
+    return cast("pd.DataFrame", parsed[is_bisecting | is_kpp_bp].copy())
 
 
 def add_dataset_context(df: pd.DataFrame, data_dir: Path) -> pd.DataFrame:

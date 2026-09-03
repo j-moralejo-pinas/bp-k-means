@@ -342,7 +342,7 @@ def main(
 
     special_benchmarks = [
         (
-            "com_madrid_osm_drive_nodes_split_split",
+            "com_madrid_osm_drive_nodes_split",
             "com_madrid_distance_metrics",
             "Community of Madrid",
         ),

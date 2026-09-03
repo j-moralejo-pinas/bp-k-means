@@ -5,6 +5,7 @@ import json
 import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 from bp_k_means.tools.benchmark import (
     benchmark_castile_leon_max_response_time,
@@ -34,6 +35,8 @@ class ExperimentConfig:
     skip_existing: bool
     include_bisecting_kmeans: bool
     include_precomputed_bisecting_kmeans: bool
+    include_bp_kmeans: bool = True
+
 
 def _resolve_path(value: object, config_path: Path, field_name: str) -> Path:
     if not isinstance(value, str) or not value:
@@ -59,7 +62,7 @@ def _read_positive_values[Number: (int, float)](
     return values
 
 
-def _required_setting(settings: dict, field_name: str) -> object:
+def _required_setting(settings: dict, field_name: str) -> Any:
     """Return a required benchmark setting with a useful validation error."""
     if field_name not in settings:
         msg = f"missing required benchmark setting: {field_name}"
@@ -121,6 +124,7 @@ def load_config(config_path: Path) -> ExperimentConfig:
         include_precomputed_bisecting_kmeans=bool(
             _required_setting(settings, "include_precomputed_bisecting_kmeans")
         ),
+        include_bp_kmeans=bool(settings.get("include_bp_kmeans", True)),
     )
 
 
@@ -159,6 +163,7 @@ def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) 
             skip_existing=config.skip_existing,
             include_bisecting_kmeans=config.include_bisecting_kmeans,
             include_precomputed_bisecting_kmeans=config.include_precomputed_bisecting_kmeans,
+            include_bp_kmeans=config.include_bp_kmeans,
         )
 
     if config.run_hac_strength:
@@ -174,6 +179,7 @@ def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) 
             skip_existing=config.skip_existing,
             include_bisecting_kmeans=config.include_bisecting_kmeans,
             include_precomputed_bisecting_kmeans=config.include_precomputed_bisecting_kmeans,
+            include_bp_kmeans=config.include_bp_kmeans,
         )
 
     if config.run_special:
@@ -188,6 +194,7 @@ def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) 
             skip_existing=config.skip_existing,
             include_bisecting_kmeans=config.include_bisecting_kmeans,
             include_precomputed_bisecting_kmeans=config.include_precomputed_bisecting_kmeans,
+            include_bp_kmeans=config.include_bp_kmeans,
         )
         benchmark_com_madrid_avg_distance_to_centroid(
             datasets_dir=config.datasets_dir,
@@ -200,6 +207,7 @@ def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) 
             skip_existing=config.skip_existing,
             include_bisecting_kmeans=config.include_bisecting_kmeans,
             include_precomputed_bisecting_kmeans=config.include_precomputed_bisecting_kmeans,
+            include_bp_kmeans=config.include_bp_kmeans,
         )
 
 

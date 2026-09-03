@@ -1,21 +1,23 @@
-# Reproduction configuration for the benchmark suite.
+# Regular HAC-only benchmark configuration.
 # Paths are resolved relative to this file.
 
 [benchmark]
 datasets_dir = "../data/datasets"
-benchmark_output_dir = "../output/benchmark"
+benchmark_output_dir = "../output/hac"
 analysis_output_dir = "../output/analysis"
 seed = 42
 k_multipliers = [1.5, 2.0, 4.0]
-n_inits = [1, 2, 4, 8, 16, 32]
+n_inits = [1]
 subsample_size = 10
+
 run_regular = true
 run_hac_strength = false
 hac_strength_multiplier = 1.5
-run_special = true
+run_special = false
+
 include_cop_kmeans = false
-include_hac = false
-skip_existing = true
-include_bisecting_kmeans = true
-include_precomputed_bisecting_kmeans = true
-include_bp_kmeans = true
+include_hac = true
+skip_existing = false
+include_bisecting_kmeans = false
+include_precomputed_bisecting_kmeans = false
+include_bp_kmeans = false
