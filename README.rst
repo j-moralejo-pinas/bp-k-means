@@ -64,8 +64,15 @@ The command writes benchmark outputs to ``output`` and records the effective con
 ``output/experiment_config.json``. Benchmark results include elapsed time, WCSS statistics,
 cluster assignments, and the random seed used for the run.
 
+Set ``skip_existing = true`` to resume a partial benchmark: combinations that already have a
+``metadata.json`` output are skipped. It defaults to ``false``.
+
 COP-KMeans is available as an opt-in comparator; set ``include_cop_kmeans = true`` in the TOML
 configuration when it should be included.
+
+The two bisecting implementations can be controlled independently with
+``include_bisecting_kmeans`` and ``include_precomputed_bisecting_kmeans``; both default to
+``true``.
 
 To generate figures and aggregate tables from those outputs:
 

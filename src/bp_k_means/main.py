@@ -31,6 +31,10 @@ class ExperimentConfig:
     hac_strength_multiplier: float = 1.5
     run_special: bool = True
     include_cop_kmeans: bool = False
+    include_hac: bool = True
+    skip_existing: bool = False
+    include_bisecting_kmeans: bool = True
+    include_precomputed_bisecting_kmeans: bool = True
 
 
 def _resolve_path(value: object, config_path: Path, field_name: str) -> Path:
@@ -98,6 +102,12 @@ def load_config(config_path: Path) -> ExperimentConfig:
         hac_strength_multiplier=float(settings.get("hac_strength_multiplier", 1.5)),
         run_special=bool(settings.get("run_special", True)),
         include_cop_kmeans=bool(settings.get("include_cop_kmeans", False)),
+        include_hac=bool(settings.get("include_hac", True)),
+        skip_existing=bool(settings.get("skip_existing", False)),
+        include_bisecting_kmeans=bool(settings.get("include_bisecting_kmeans", True)),
+        include_precomputed_bisecting_kmeans=bool(
+            settings.get("include_precomputed_bisecting_kmeans", True)
+        ),
     )
 
 
@@ -131,6 +141,10 @@ def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) 
             n_inits=config.n_inits,
             subsample_size=config.subsample_size,
             include_cop_kmeans=config.include_cop_kmeans,
+            include_hac=config.include_hac,
+            skip_existing=config.skip_existing,
+            include_bisecting_kmeans=config.include_bisecting_kmeans,
+            include_precomputed_bisecting_kmeans=config.include_precomputed_bisecting_kmeans,
         )
 
     if config.run_hac_strength:
@@ -142,6 +156,10 @@ def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) 
             n_inits=config.n_inits,
             subsample_size=config.subsample_size,
             include_cop_kmeans=config.include_cop_kmeans,
+            include_hac=config.include_hac,
+            skip_existing=config.skip_existing,
+            include_bisecting_kmeans=config.include_bisecting_kmeans,
+            include_precomputed_bisecting_kmeans=config.include_precomputed_bisecting_kmeans,
         )
 
     if config.run_special:
@@ -152,6 +170,10 @@ def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) 
             n_inits=config.n_inits,
             subsample_size=config.subsample_size,
             include_cop_kmeans=config.include_cop_kmeans,
+            include_hac=config.include_hac,
+            skip_existing=config.skip_existing,
+            include_bisecting_kmeans=config.include_bisecting_kmeans,
+            include_precomputed_bisecting_kmeans=config.include_precomputed_bisecting_kmeans,
         )
         benchmark_com_madrid_avg_distance_to_centroid(
             datasets_dir=config.datasets_dir,
@@ -160,6 +182,10 @@ def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) 
             n_inits=config.n_inits,
             subsample_size=config.subsample_size,
             include_cop_kmeans=config.include_cop_kmeans,
+            include_hac=config.include_hac,
+            skip_existing=config.skip_existing,
+            include_bisecting_kmeans=config.include_bisecting_kmeans,
+            include_precomputed_bisecting_kmeans=config.include_precomputed_bisecting_kmeans,
         )
 
 

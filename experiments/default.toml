@@ -13,3 +13,7 @@ run_hac_strength = false
 hac_strength_multiplier = 1.5
 run_special = true
 include_cop_kmeans = false
+include_hac = false
+skip_existing = true
+include_bisecting_kmeans = true
+include_precomputed_bisecting_kmeans = true

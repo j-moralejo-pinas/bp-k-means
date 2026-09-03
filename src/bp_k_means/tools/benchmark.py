@@ -205,6 +205,9 @@ def _build_algorithms(
     n_inits: list[int] | tuple[int, ...] = DEFAULT_N_INITS,
     subsample_size: int = 10,
     include_cop_kmeans: bool = False,
+    include_hac: bool = True,
+    include_bisecting_kmeans: bool = True,
+    include_precomputed_bisecting_kmeans: bool = True,
 ) -> list[tuple[str, BaseAlgo]]:
     """Build the algorithms used by the benchmark suite."""
     algorithms: list[tuple[str, BaseAlgo]] = []
@@ -226,15 +229,20 @@ def _build_algorithms(
     for n_init in n_inits:
         if include_cop_kmeans:
             algorithms.append(("COP-KMeans", COPKMeans(seed=seed, n_init=n_init)))
-        algorithms.append(("Bisecting KMeans", BisectingKMeansNoRefine(seed=seed, n_init=n_init)))
-        algorithms.append(
-            (
-                "Bisecting KMeans (M_RL)",
-                PrecomputedBisectingKMeansNoRefine(seed=seed, n_init=n_init),
+        if include_bisecting_kmeans:
+            algorithms.append(
+                ("Bisecting KMeans", BisectingKMeansNoRefine(seed=seed, n_init=n_init))
             )
-        )
+        if include_precomputed_bisecting_kmeans:
+            algorithms.append(
+                (
+                    "Bisecting KMeans (M_RL)",
+                    PrecomputedBisectingKMeansNoRefine(seed=seed, n_init=n_init),
+                )
+            )
 
-    algorithms.append(("HAC Ward (NNC)", HACWardNNC(seed=seed)))
+    if include_hac:
+        algorithms.append(("HAC Ward (NNC)", HACWardNNC(seed=seed)))
     return algorithms
 
 
@@ -247,6 +255,10 @@ def run_benchmark(
     n_inits: list[int] | tuple[int, ...] = DEFAULT_N_INITS,
     subsample_size: int = 10,
     include_cop_kmeans: bool = False,
+    include_hac: bool = True,
+    skip_existing: bool = False,
+    include_bisecting_kmeans: bool = True,
+    include_precomputed_bisecting_kmeans: bool = True,
 ) -> None:
     """Run the regular benchmark suite for all available datasets."""
     dataset_files = list(datasets_dir.glob("*nodes.parquet"))
@@ -261,6 +273,9 @@ def run_benchmark(
         n_inits=n_inits,
         subsample_size=subsample_size,
         include_cop_kmeans=include_cop_kmeans,
+        include_hac=include_hac,
+        include_bisecting_kmeans=include_bisecting_kmeans,
+        include_precomputed_bisecting_kmeans=include_precomputed_bisecting_kmeans,
     )
 
     for dataset_path in dataset_files:
@@ -290,6 +305,26 @@ def run_benchmark(
 
             for alg_name, algo in algorithms:
                 n_init = algo.n_init
+                meta_path = (
+                    _algorithm_output_dir(
+                        output_dir,
+                        dataset_path.stem,
+                        alg_name,
+                        target_k,
+                        n_init,
+                    )
+                    / "metadata.json"
+                )
+                if skip_existing and meta_path.exists():
+                    logger.info(
+                        "  Skipping %s | k=%s (x%s) | n_init=%s; output already exists.",
+                        alg_name,
+                        target_k,
+                        k_mult,
+                        n_init,
+                    )
+                    continue
+
                 logger.info(
                     "  Running %s | k=%s (x%s) | n_init=%s",
                     alg_name,
@@ -339,6 +374,10 @@ def run_hac_strength_benchmark(
     n_inits: list[int] | tuple[int, ...] = DEFAULT_N_INITS,
     subsample_size: int = 10,
     include_cop_kmeans: bool = False,
+    include_hac: bool = True,
+    skip_existing: bool = False,
+    include_bisecting_kmeans: bool = True,
+    include_precomputed_bisecting_kmeans: bool = True,
 ) -> None:
     """
     Run the HAC-strength benchmark.
@@ -363,6 +402,9 @@ def run_hac_strength_benchmark(
         n_inits=n_inits,
         subsample_size=subsample_size,
         include_cop_kmeans=include_cop_kmeans,
+        include_hac=include_hac,
+        include_bisecting_kmeans=include_bisecting_kmeans,
+        include_precomputed_bisecting_kmeans=include_precomputed_bisecting_kmeans,
     )
     output_dir = output_dir / "hac_strength"
     safe_multiplier = str(cluster_multiplier).replace(".", "_")
@@ -420,7 +462,7 @@ def run_hac_strength_benchmark(
                 )
                 / "metadata.json"
             )
-            if meta_path.exists():
+            if skip_existing and meta_path.exists():
                 logger.info(
                     "  Skipping %s | k=%s (x%s nodes) | n_init=%s; output already exists.",
                     alg_name,
@@ -526,6 +568,10 @@ def benchmark_com_madrid_avg_distance_to_centroid(
     n_inits: list[int] | tuple[int, ...] = DEFAULT_N_INITS,
     subsample_size: int = 10,
     include_cop_kmeans: bool = False,
+    include_hac: bool = True,
+    skip_existing: bool = False,
+    include_bisecting_kmeans: bool = True,
+    include_precomputed_bisecting_kmeans: bool = True,
 ) -> None:
     """Benchmark average distance to centroid at k=10000 for Community of Madrid."""
     dataset_path = datasets_dir / "com_madrid_osm_drive_nodes_split_split.parquet"
@@ -543,10 +589,25 @@ def benchmark_com_madrid_avg_distance_to_centroid(
         n_inits=n_inits,
         subsample_size=subsample_size,
         include_cop_kmeans=include_cop_kmeans,
+        include_hac=include_hac,
+        include_bisecting_kmeans=include_bisecting_kmeans,
+        include_precomputed_bisecting_kmeans=include_precomputed_bisecting_kmeans,
     )
 
     for alg_name, algo in algorithms:
         n_init = algo.n_init
+        meta_path = (
+            _algorithm_output_dir(output_dir, dataset_path.stem, alg_name, target_k, n_init)
+            / "metadata.json"
+        )
+        if skip_existing and meta_path.exists():
+            logger.info(
+                "  Skipping %s | k=%s; output already exists.",
+                alg_name,
+                target_k,
+            )
+            continue
+
         logger.info("  Running %s | k=%s | n_init=%s", alg_name, target_k, n_init)
         labels, duration = _run_algorithm(algo, X, y, target_k)
 
@@ -572,10 +633,6 @@ def benchmark_com_madrid_avg_distance_to_centroid(
 
         dist_metrics = _compute_distance_metrics(X, labels, y)
 
-        meta_path = (
-            _algorithm_output_dir(output_dir, dataset_path.stem, alg_name, target_k, n_init)
-            / "metadata.json"
-        )
         _update_metadata(meta_path, dist_metrics)
 
         logger.info(
@@ -597,6 +654,10 @@ def benchmark_castile_leon_max_response_time(
     n_inits: list[int] | tuple[int, ...] = DEFAULT_N_INITS,
     subsample_size: int = 10,
     include_cop_kmeans: bool = False,
+    include_hac: bool = True,
+    skip_existing: bool = False,
+    include_bisecting_kmeans: bool = True,
+    include_precomputed_bisecting_kmeans: bool = True,
 ) -> None:
     """Benchmark: maximum response time at k=200 using province labels (Castile and León)."""
     dataset_path = datasets_dir / "castile_and_leon_osm_drive_nodes.parquet"
@@ -623,11 +684,26 @@ def benchmark_castile_leon_max_response_time(
         n_inits=n_inits,
         subsample_size=subsample_size,
         include_cop_kmeans=include_cop_kmeans,
+        include_hac=include_hac,
+        include_bisecting_kmeans=include_bisecting_kmeans,
+        include_precomputed_bisecting_kmeans=include_precomputed_bisecting_kmeans,
     )
 
     for alg_name, algo in algorithms:
         n_init = algo.n_init
         # only benchmark n_init=8 for max response time
+        meta_path = (
+            _algorithm_output_dir(output_dir, dataset_path.stem, alg_name, target_k, n_init)
+            / "metadata.json"
+        )
+        if skip_existing and meta_path.exists():
+            logger.info(
+                "  Skipping %s | k=%s; output already exists.",
+                alg_name,
+                target_k,
+            )
+            continue
+
         logger.info("  Running %s | k=%s | n_init=%s", alg_name, target_k, n_init)
         labels, duration = _run_algorithm(algo, X, y, target_k)
 
@@ -653,10 +729,6 @@ def benchmark_castile_leon_max_response_time(
 
         dist_metrics = _compute_distance_metrics(X, labels, y)
 
-        meta_path = (
-            _algorithm_output_dir(output_dir, dataset_path.stem, alg_name, target_k, n_init)
-            / "metadata.json"
-        )
         _update_metadata(meta_path, {"response_time_s": duration, **dist_metrics})
 
         logger.info(
