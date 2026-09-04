@@ -75,7 +75,7 @@ COP-KMeans is available as an opt-in comparator; set ``include_cop_kmeans = true
 configuration when it should be included.
 
 The two bisecting implementations can be controlled independently with
-``include_bisecting_kmeans`` and ``include_precomputed_bisecting_kmeans``.
+``include_bisecting_kmeans`` and ``include_bisecting_kmeans_m_rl``.
 
 To generate figures and aggregate tables from those outputs, which are written to the configured
 analysis output directory (``output/analysis`` by default):

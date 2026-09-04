@@ -1,4 +1,4 @@
-"""Bisecting k-means variants that cache split candidates per label."""
+"""Bisecting k-means variants using the M_RL ranking metric."""
 
 import heapq
 from typing import TYPE_CHECKING
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 MIN_SPLIT_POINTS = 2
 
 
-def precomputed_bisecting_kmeans_by_label_optimized(  # noqa: C901 - candidate orchestration
+def bisecting_kmeans_m_rl_by_label_optimized(  # noqa: C901 - candidate orchestration
     X: "NDArray",
     y: "NDArray",
     target_k: int,
@@ -23,12 +23,12 @@ def precomputed_bisecting_kmeans_by_label_optimized(  # noqa: C901 - candidate o
     n_init: int,
 ) -> "NDArray":
     """
-    Bisecting K-Means with label constraint and precomputed splits (Refine Cluster strategy).
+    Bisecting K-Means with label constraint and M_RL ranking (Refine Cluster strategy).
 
     In this version (Refine Cluster):
 
         - We maintain the clustering state for each label.
-        - We precompute the effect of splitting one more cluster for each label.
+        - We calculate the effect of splitting one more cluster for each label.
         - Since we have the whole label group, we can re-run k-means on the whole group with k+1
       centroids (seeded from previous centroids + split of the worst cluster).
         - The heap stores the ACTUAL reduction in WCSS for the entire label group
@@ -252,7 +252,7 @@ class ClusterNode:
         self.X2_sum = X2_sum
 
 
-def precomputed_bisecting_kmeans_by_label_optimized_no_refine(  # noqa: C901, PLR0912
+def bisecting_kmeans_m_rl_by_label_optimized_no_refine(  # noqa: C901, PLR0912
     X: "NDArray",
     y: "NDArray",
     target_k: int,
@@ -260,7 +260,7 @@ def precomputed_bisecting_kmeans_by_label_optimized_no_refine(  # noqa: C901, PL
     n_init: int,
 ) -> "NDArray":
     """
-    Bisecting K-Means with label constraint and precomputed splits (No Refine strategy).
+    Bisecting K-Means with label constraint and M_RL ranking (No Refine strategy).
 
     In this version (No Refine):
     - We treat every cluster as an independent candidate for splitting.
@@ -493,16 +493,16 @@ def precomputed_bisecting_kmeans_by_label_optimized_no_refine(  # noqa: C901, PL
     return labels_final
 
 
-class PrecomputedBisectingKMeans(BaseAlgo):
-    """Common-interface wrapper around refined precomputed bisecting k-means."""
+class BisectingKMeansMRL(BaseAlgo):
+    """Common-interface wrapper around refined M_RL bisecting k-means."""
 
     def fit(
         self,
         X: ArrayLike,
         y: ArrayLike | None,
         target_k: int,
-    ) -> "PrecomputedBisectingKMeans":
-        """Fit refined precomputed bisecting k-means.
+    ) -> "BisectingKMeansMRL":
+        """Fit refined M_RL bisecting k-means.
 
         Parameters
         ----------
@@ -515,7 +515,7 @@ class PrecomputedBisectingKMeans(BaseAlgo):
 
         Returns
         -------
-        PrecomputedBisectingKMeans
+        BisectingKMeansMRL
             The fitted algorithm instance.
 
         Raises
@@ -524,11 +524,11 @@ class PrecomputedBisectingKMeans(BaseAlgo):
             If original labels are not provided.
         """
         if y is None:
-            msg = "PrecomputedBisectingKMeans requires original labels"
+            msg = "BisectingKMeansMRL requires original labels"
             raise ValueError(msg)
         X_array = np.asarray(X)
         y_array = np.asarray(y)
-        labels = precomputed_bisecting_kmeans_by_label_optimized(
+        labels = bisecting_kmeans_m_rl_by_label_optimized(
             X_array,
             y_array,
             target_k,
@@ -538,16 +538,16 @@ class PrecomputedBisectingKMeans(BaseAlgo):
         return self._set_result(labels)
 
 
-class PrecomputedBisectingKMeansNoRefine(BaseAlgo):
-    """Common-interface wrapper around non-refined precomputed bisecting k-means."""
+class BisectingKMeansMRLNoRefine(BaseAlgo):
+    """Common-interface wrapper around non-refined M_RL bisecting k-means."""
 
     def fit(
         self,
         X: ArrayLike,
         y: ArrayLike | None,
         target_k: int,
-    ) -> "PrecomputedBisectingKMeansNoRefine":
-        """Fit non-refined precomputed bisecting k-means.
+    ) -> "BisectingKMeansMRLNoRefine":
+        """Fit non-refined M_RL bisecting k-means.
 
         Parameters
         ----------
@@ -560,7 +560,7 @@ class PrecomputedBisectingKMeansNoRefine(BaseAlgo):
 
         Returns
         -------
-        PrecomputedBisectingKMeansNoRefine
+        BisectingKMeansMRLNoRefine
             The fitted algorithm instance.
 
         Raises
@@ -569,11 +569,11 @@ class PrecomputedBisectingKMeansNoRefine(BaseAlgo):
             If original labels are not provided.
         """
         if y is None:
-            msg = "PrecomputedBisectingKMeansNoRefine requires original labels"
+            msg = "BisectingKMeansMRLNoRefine requires original labels"
             raise ValueError(msg)
         X_array = np.asarray(X)
         y_array = np.asarray(y)
-        labels = precomputed_bisecting_kmeans_by_label_optimized_no_refine(
+        labels = bisecting_kmeans_m_rl_by_label_optimized_no_refine(
             X_array,
             y_array,
             target_k,

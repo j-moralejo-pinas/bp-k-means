@@ -28,7 +28,7 @@ class ExperimentConfig:
     include_hac: bool
     skip_existing: bool
     include_bisecting_kmeans: bool
-    include_precomputed_bisecting_kmeans: bool
+    include_bisecting_kmeans_m_rl: bool
     include_bp_kmeans: bool = True
 
 
@@ -114,8 +114,8 @@ def load_config(config_path: Path) -> ExperimentConfig:
         include_hac=bool(_required_setting(settings, "include_hac")),
         skip_existing=bool(_required_setting(settings, "skip_existing")),
         include_bisecting_kmeans=bool(_required_setting(settings, "include_bisecting_kmeans")),
-        include_precomputed_bisecting_kmeans=bool(
-            _required_setting(settings, "include_precomputed_bisecting_kmeans")
+        include_bisecting_kmeans_m_rl=bool(
+            _required_setting(settings, "include_bisecting_kmeans_m_rl")
         ),
         include_bp_kmeans=bool(settings.get("include_bp_kmeans", True)),
     )
@@ -153,7 +153,7 @@ def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) 
         "include_hac": config.include_hac,
         "skip_existing": config.skip_existing,
         "include_bisecting_kmeans": config.include_bisecting_kmeans,
-        "include_precomputed_bisecting_kmeans": config.include_precomputed_bisecting_kmeans,
+        "include_bisecting_kmeans_m_rl": config.include_bisecting_kmeans_m_rl,
         "include_bp_kmeans": config.include_bp_kmeans,
     }
 

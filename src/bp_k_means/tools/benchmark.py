@@ -11,13 +11,13 @@ import numpy as np
 import pandas as pd
 
 from bp_k_means.algos.base_algo import BaseAlgo
+from bp_k_means.algos.bisecting_k_means_m_rl_optimized import (
+    BisectingKMeansMRLNoRefine,
+)
 from bp_k_means.algos.bisecting_k_means_optimized import BisectingKMeansNoRefine
 from bp_k_means.algos.bp_kmeans import BPKMeans, InitAlgorithm, InitStrategy, RankingMetric
 from bp_k_means.algos.cop_k_means import COPKMeans
 from bp_k_means.algos.hac import HACWardNNC
-from bp_k_means.algos.precomputed_bisecting_k_means_optimized import (
-    PrecomputedBisectingKMeansNoRefine,
-)
 from bp_k_means.utils.logging import logger
 from bp_k_means.utils.metrics import overall_wcss
 
@@ -302,7 +302,7 @@ def _build_algorithms(
     include_cop_kmeans: bool,
     include_hac: bool,
     include_bisecting_kmeans: bool,
-    include_precomputed_bisecting_kmeans: bool,
+    include_bisecting_kmeans_m_rl: bool,
     include_bp_kmeans: bool = True,
 ) -> list[tuple[str, BaseAlgo]]:
     """Build the algorithms used by the benchmark suite."""
@@ -330,11 +330,11 @@ def _build_algorithms(
             algorithms.append(
                 ("Bisecting KMeans", BisectingKMeansNoRefine(seed=seed, n_init=n_init))
             )
-        if include_precomputed_bisecting_kmeans:
+        if include_bisecting_kmeans_m_rl:
             algorithms.append(
                 (
-                    "Bisecting KMeans (M_RL)",
-                    PrecomputedBisectingKMeansNoRefine(seed=seed, n_init=n_init),
+                    "Bisecting KMeans M_RL",
+                    BisectingKMeansMRLNoRefine(seed=seed, n_init=n_init),
                 )
             )
 
@@ -355,7 +355,7 @@ def run_benchmark(
     include_hac: bool,
     skip_existing: bool,
     include_bisecting_kmeans: bool,
-    include_precomputed_bisecting_kmeans: bool,
+    include_bisecting_kmeans_m_rl: bool,
     include_bp_kmeans: bool,
     k_values: list[float] | tuple[float, ...],
     dataset_filename: str | None = None,
@@ -374,7 +374,7 @@ def run_benchmark(
         include_cop_kmeans=include_cop_kmeans,
         include_hac=include_hac,
         include_bisecting_kmeans=include_bisecting_kmeans,
-        include_precomputed_bisecting_kmeans=include_precomputed_bisecting_kmeans,
+        include_bisecting_kmeans_m_rl=include_bisecting_kmeans_m_rl,
         include_bp_kmeans=include_bp_kmeans,
     )
 

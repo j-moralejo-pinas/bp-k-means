@@ -7,6 +7,13 @@ import numpy as np
 import pytest
 from conftest import assert_label_pure, direct_wcss
 
+from bp_k_means.algos.bisecting_k_means_m_rl_optimized import (
+    BisectingKMeansMRL,
+    BisectingKMeansMRLNoRefine,
+    ClusterNode,
+    bisecting_kmeans_m_rl_by_label_optimized,
+    bisecting_kmeans_m_rl_by_label_optimized_no_refine,
+)
 from bp_k_means.algos.bisecting_k_means_optimized import (
     BisectingKMeans,
     BisectingKMeansNoRefine,
@@ -16,13 +23,6 @@ from bp_k_means.algos.bisecting_k_means_optimized import (
     _validate_inputs,
     bisecting_kmeans_by_label_optimized,
     bisecting_kmeans_by_label_optimized_no_refine,
-)
-from bp_k_means.algos.precomputed_bisecting_k_means_optimized import (
-    ClusterNode,
-    PrecomputedBisectingKMeans,
-    PrecomputedBisectingKMeansNoRefine,
-    precomputed_bisecting_kmeans_by_label_optimized,
-    precomputed_bisecting_kmeans_by_label_optimized_no_refine,
 )
 
 
@@ -99,8 +99,8 @@ def test_cluster_node_stores_split_candidate_state() -> None:
     [
         bisecting_kmeans_by_label_optimized,
         bisecting_kmeans_by_label_optimized_no_refine,
-        precomputed_bisecting_kmeans_by_label_optimized,
-        precomputed_bisecting_kmeans_by_label_optimized_no_refine,
+        bisecting_kmeans_m_rl_by_label_optimized,
+        bisecting_kmeans_m_rl_by_label_optimized_no_refine,
     ],
 )
 def test_all_bisecting_variants_reach_target_and_preserve_labels(
@@ -122,8 +122,8 @@ def test_all_bisecting_variants_reach_target_and_preserve_labels(
     [
         bisecting_kmeans_by_label_optimized,
         bisecting_kmeans_by_label_optimized_no_refine,
-        precomputed_bisecting_kmeans_by_label_optimized,
-        precomputed_bisecting_kmeans_by_label_optimized_no_refine,
+        bisecting_kmeans_m_rl_by_label_optimized,
+        bisecting_kmeans_m_rl_by_label_optimized_no_refine,
     ],
 )
 def test_all_bisecting_variants_return_identity_at_maximum_target(
@@ -155,8 +155,8 @@ def test_bisecting_variants_reject_infeasible_targets(algorithm) -> None:
     [
         BisectingKMeans,
         BisectingKMeansNoRefine,
-        PrecomputedBisectingKMeans,
-        PrecomputedBisectingKMeansNoRefine,
+        BisectingKMeansMRL,
+        BisectingKMeansMRLNoRefine,
     ],
 )
 def test_bisecting_wrappers_require_labels_and_store_results(wrapper) -> None:

@@ -16,5 +16,5 @@ include_cop_kmeans = false
 include_hac = false
 skip_existing = true
 include_bisecting_kmeans = true
-include_precomputed_bisecting_kmeans = true
+include_bisecting_kmeans_m_rl = true
 include_bp_kmeans = true
