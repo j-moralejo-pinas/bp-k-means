@@ -111,9 +111,7 @@ def test_nnc_uses_the_lowest_ward_merge_for_a_requested_cut() -> None:
 
 
 def test_nnc_preserves_merged_memberships_instead_of_reassigning_by_centroid() -> None:
-    X = np.array(
-        [[0.0, 0.0], [0.0, 2.0], [1.0, 1.0], [2.0, 1.0], [2.0, 3.0], [3.0, 0.0]]
-    )
+    X = np.array([[0.0, 0.0], [0.0, 2.0], [1.0, 1.0], [2.0, 1.0], [2.0, 3.0], [3.0, 0.0]])
     y = np.array(["a"] * len(X))
 
     nnc_labels = hac_ward_nnc_by_label(X, y, target_k=3)
@@ -135,7 +133,7 @@ def test_hac_variants_return_identity_at_one_cluster_per_point(algorithm) -> Non
 def test_hac_wrappers_require_labels_and_store_labels(wrapper) -> None:
     X = np.array([[0.0], [1.0], [10.0], [11.0]])
     y = np.array(["a", "a", "b", "b"])
-    model = wrapper(seed=0, n_init=1)
+    model = wrapper(seed=0)
 
     with pytest.raises(ValueError, match="requires original labels"):
         model.fit(X, None, 2)

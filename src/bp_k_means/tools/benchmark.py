@@ -3,7 +3,9 @@
 import json
 import re
 import time
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -168,6 +170,40 @@ def _load_dataset(dataset_path: Path, label_column: str) -> tuple[np.ndarray, np
     return df[["x_utm", "y_utm"]].to_numpy(), df[label_column].to_numpy()
 
 
+def _iter_datasets(
+    datasets_dir: Path,
+    label_column: str,
+    *,
+    regular_only: bool = False,
+    dataset_filename: str | None = None,
+) -> Iterator[tuple[Path, np.ndarray, np.ndarray]]:
+    """Yield benchmark datasets, skipping files that cannot be loaded."""
+    dataset_files = (
+        [datasets_dir / dataset_filename]
+        if dataset_filename is not None
+        else list(datasets_dir.glob("*nodes.parquet"))
+    )
+    if regular_only and dataset_filename is None:
+        dataset_files = [f for f in dataset_files if _is_regular_benchmark_dataset(f)]
+
+    if not dataset_files:
+        logger.error("No parquet files found in %s", datasets_dir)
+        return
+
+    if dataset_filename is not None and not dataset_files[0].exists():
+        logger.error("Dataset not found: %s", dataset_files[0])
+        return
+
+    for dataset_path in dataset_files:
+        logger.info("Loading dataset: %s", dataset_path.name)
+        try:
+            X, y = _load_dataset(dataset_path, label_column)
+        except Exception:  # noqa: BLE001 - keep processing the remaining datasets
+            logger.exception("Failed to process dataset %s", dataset_path.name)
+            continue
+        yield dataset_path, X, y
+
+
 def _run_algorithm(
     algo: BaseAlgo,
     X: np.ndarray,
@@ -190,6 +226,69 @@ def _update_metadata(metadata_path: Path, updates: dict) -> None:
     metadata.update(updates)
     with metadata_path.open("w") as metadata_file:
         json.dump(metadata, metadata_file, indent=2)
+
+
+def _run_algorithms(
+    *,
+    algorithms: list[tuple[str, BaseAlgo]],
+    dataset_name: str,
+    X: np.ndarray,
+    y: np.ndarray,
+    target_k: int,
+    k_mult: float,
+    output_dir: Path,
+    seed: int,
+    skip_existing: bool,
+    benchmark_type: str = "regular",
+    run_name_prefix: str | None = None,
+    extra_metadata: dict | None = None,
+    postprocess: Callable[[Path, np.ndarray, float], None] | None = None,
+) -> None:
+    """Run and persist all algorithms for one benchmark case."""
+    for alg_name, algo in algorithms:
+        run_name = f"{run_name_prefix}_ninit{algo.n_init}" if run_name_prefix else None
+        meta_path = (
+            _algorithm_output_dir(
+                output_dir, dataset_name, alg_name, target_k, algo.n_init, run_name
+            )
+            / "metadata.json"
+        )
+        if skip_existing and meta_path.exists():
+            logger.info("  Skipping %s | k=%s; output already exists.", alg_name, target_k)
+            continue
+
+        logger.info("  Running %s | k=%s | n_init=%s", alg_name, target_k, algo.n_init)
+        labels, duration = _run_algorithm(algo, X, y, target_k)
+        if labels is None:
+            logger.error("    %s failed to produce labels.", alg_name)
+            continue
+
+        wcss = overall_wcss(X, labels)
+        _save_run_outputs(
+            dataset_name=dataset_name,
+            alg_name=alg_name,
+            k=target_k,
+            k_mult=k_mult,
+            n_init=algo.n_init,
+            X=X,
+            y=y,
+            labels=labels,
+            duration=duration,
+            wcss=wcss,
+            output_dir=output_dir,
+            benchmark_type=benchmark_type,
+            seed=seed,
+            extra_metadata=extra_metadata,
+            run_name=run_name,
+        )
+        logger.info(
+            "    -> Time: %.4fs | WCSS: %.4f | Clusters: %s",
+            duration,
+            wcss,
+            len(np.unique(labels)),
+        )
+        if postprocess is not None:
+            postprocess(meta_path, labels, duration)
 
 
 # Algorithm factory
@@ -240,7 +339,7 @@ def _build_algorithms(
             )
 
     if include_hac:
-        algorithms.append(("HAC Ward (NNC)", HACWardNNC(seed=seed, n_init=n_inits[0])))
+        algorithms.append(("HAC Ward (NNC)", HACWardNNC(seed=seed)))
     return algorithms
 
 
@@ -248,8 +347,8 @@ def run_benchmark(
     datasets_dir: Path,
     output_dir: Path,
     *,
+    benchmark_type: Literal["regular", "hac_strength", "special"],
     seed: int,
-    k_multipliers: list[float] | tuple[float, ...],
     n_inits: list[int] | tuple[int, ...],
     subsample_size: int,
     include_cop_kmeans: bool,
@@ -257,15 +356,16 @@ def run_benchmark(
     skip_existing: bool,
     include_bisecting_kmeans: bool,
     include_precomputed_bisecting_kmeans: bool,
-    include_bp_kmeans: bool = True,
+    include_bp_kmeans: bool,
+    k_values: list[float] | tuple[float, ...],
+    dataset_filename: str | None = None,
+    label_column: str = "CUSEC",
+    log_label_name: str | None = None,
 ) -> None:
-    """Run the regular benchmark suite for all available datasets."""
-    dataset_files = list(datasets_dir.glob("*nodes.parquet"))
-    dataset_files = [f for f in dataset_files if _is_regular_benchmark_dataset(f)]
-
-    if not dataset_files:
-        logger.error("No parquet files found in %s", datasets_dir)
-        return
+    """Run a benchmark, with the benchmark type supplying its case-specific settings."""
+    if not k_values or any(value <= 0 for value in k_values):
+        msg = "k must be a non-empty list of positive values"
+        raise ValueError(msg)
 
     algorithms = _build_algorithms(
         seed=seed,
@@ -278,248 +378,89 @@ def run_benchmark(
         include_bp_kmeans=include_bp_kmeans,
     )
 
-    for dataset_path in dataset_files:
-        logger.info("Loading dataset: %s", dataset_path.name)
-        try:
-            X, y = _load_dataset(dataset_path, "CUSEC")
+    for dataset_path, X, y in _iter_datasets(
+        datasets_dir,
+        label_column,
+        regular_only=benchmark_type == "regular",
+        dataset_filename=dataset_filename,
+    ):
+        postprocess = _distance_postprocessor(X, y) if benchmark_type == "special" else None
 
-            n_instances = len(X)
-            n_labels = len(np.unique(y))
-        except Exception:  # noqa: BLE001 - keep processing the remaining datasets
-            logger.exception("Failed to process dataset %s", dataset_path.name)
-            continue
+        n_instances = len(X)
+        n_labels = len(np.unique(y))
 
-        logger.info("  Instances: %s, Labels: %s", n_instances, n_labels)
+        label_description = f"unique {log_label_name}" if log_label_name else "Labels"
+        logger.info(
+            "  Instances: %s, %s: %s | k=%s",
+            n_instances,
+            label_description,
+            n_labels,
+            k_values,
+        )
 
-        for k_mult in k_multipliers:
-            target_k = int(n_labels * k_mult)
+        cases: list[tuple[int, float, Path, str, str | None, dict | None]] = []
+        if benchmark_type == "regular":
+            cases.extend(
+                (int(n_labels * k_value), k_value, output_dir, "regular", None, None)
+                for k_value in k_values
+            )
+        elif benchmark_type == "hac_strength":
+            cases.extend(
+                (
+                    (
+                        case_target_k := min(
+                            (requested_target_k := int(n_instances * k_value)), n_instances
+                        )
+                    ),
+                    k_value,
+                    output_dir / "hac_strength",
+                    "hac_strength",
+                    f"nodesx{str(k_value).replace('.', '_')}_k{case_target_k}",
+                    {
+                        "cluster_multiplier_basis": "nodes",
+                        "requested_cluster_multiplier": k_value,
+                        "requested_n_clusters": requested_target_k,
+                        "effective_n_clusters": case_target_k,
+                        "target_k_was_capped": requested_target_k != case_target_k,
+                    },
+                )
+                for k_value in k_values
+            )
+        else:
+            cases.extend(
+                (int(k_value), 1.0, output_dir, "special", None, None) for k_value in k_values
+            )
 
-            if target_k > n_instances:
+        for case_target_k, k_mult, case_output_dir, case_type, run_name, metadata in cases:
+            if not n_labels <= case_target_k <= n_instances:
                 logger.warning(
-                    "  Skipping k=%s (x%s) because it exceeds n_instances (%s)",
-                    target_k,
-                    k_mult,
+                    "  Skipping k=%s because it must be between labels=%s and instances=%s.",
+                    case_target_k,
+                    n_labels,
                     n_instances,
                 )
                 continue
-
-            for alg_name, algo in algorithms:
-                n_init = algo.n_init
-                meta_path = (
-                    _algorithm_output_dir(
-                        output_dir,
-                        dataset_path.stem,
-                        alg_name,
-                        target_k,
-                        n_init,
-                    )
-                    / "metadata.json"
+            if metadata and metadata.get("target_k_was_capped"):
+                logger.warning(
+                    "  Requested k=%s exceeds n_instances=%s; using k=%s.",
+                    metadata["requested_n_clusters"],
+                    n_instances,
+                    case_target_k,
                 )
-                if skip_existing and meta_path.exists():
-                    logger.info(
-                        "  Skipping %s | k=%s (x%s) | n_init=%s; output already exists.",
-                        alg_name,
-                        target_k,
-                        k_mult,
-                        n_init,
-                    )
-                    continue
-
-                logger.info(
-                    "  Running %s | k=%s (x%s) | n_init=%s",
-                    alg_name,
-                    target_k,
-                    k_mult,
-                    n_init,
-                )
-
-                labels, duration = _run_algorithm(algo, X, y, target_k)
-
-                if labels is None:
-                    logger.error("    %s failed to produce labels.", alg_name)
-                    wcss = np.nan
-                    n_clusters = 0
-                else:
-                    wcss = overall_wcss(X, labels)
-                    n_clusters = len(np.unique(labels))
-                    _save_run_outputs(
-                        dataset_name=dataset_path.stem,
-                        alg_name=alg_name,
-                        k=target_k,
-                        k_mult=k_mult,
-                        n_init=n_init,
-                        X=X,
-                        y=y,
-                        labels=labels,
-                        duration=duration,
-                        wcss=wcss,
-                        output_dir=output_dir,
-                        seed=seed,
-                    )
-
-                logger.info(
-                    "    -> Time: %.4fs | WCSS: %.4f | Clusters: %s",
-                    duration,
-                    wcss,
-                    n_clusters,
-                )
-
-
-def run_hac_strength_benchmark(
-    datasets_dir: Path,
-    output_dir: Path,
-    *,
-    cluster_multiplier: float,
-    seed: int,
-    n_inits: list[int] | tuple[int, ...],
-    subsample_size: int,
-    include_cop_kmeans: bool,
-    include_hac: bool,
-    skip_existing: bool,
-    include_bisecting_kmeans: bool,
-    include_precomputed_bisecting_kmeans: bool,
-    include_bp_kmeans: bool = True,
-) -> None:
-    """
-    Run the HAC-strength benchmark.
-
-    The target number of clusters is computed as
-    ``cluster_multiplier * n_instances`` for each dataset. Since a clustering
-    cannot contain more clusters than input points, values above ``1.0`` are
-    capped at ``n_instances`` and recorded in metadata.
-    """
-    if cluster_multiplier <= 0:
-        msg = "cluster_multiplier must be positive"
-        raise ValueError(msg)
-
-    dataset_files = list(datasets_dir.glob("*nodes.parquet"))
-
-    if not dataset_files:
-        logger.error("No parquet files found in %s", datasets_dir)
-        return
-
-    algorithms = _build_algorithms(
-        seed=seed,
-        n_inits=n_inits,
-        subsample_size=subsample_size,
-        include_cop_kmeans=include_cop_kmeans,
-        include_hac=include_hac,
-        include_bisecting_kmeans=include_bisecting_kmeans,
-        include_precomputed_bisecting_kmeans=include_precomputed_bisecting_kmeans,
-        include_bp_kmeans=include_bp_kmeans,
-    )
-    output_dir = output_dir / "hac_strength"
-    safe_multiplier = str(cluster_multiplier).replace(".", "_")
-
-    for dataset_path in dataset_files:
-        logger.info("Loading dataset: %s", dataset_path.name)
-        try:
-            X, y = _load_dataset(dataset_path, "CUSEC")
-
-            n_instances = len(X)
-            n_labels = len(np.unique(y))
-        except Exception:  # noqa: BLE001 - keep processing the remaining datasets
-            logger.exception("Failed to process dataset %s", dataset_path.name)
-            continue
-
-        requested_target_k = int(n_instances * cluster_multiplier)
-        target_k = min(requested_target_k, n_instances)
-
-        logger.info(
-            "  Instances: %s, Labels: %s, requested k=%s (x%s nodes), effective k=%s",
-            n_instances,
-            n_labels,
-            requested_target_k,
-            cluster_multiplier,
-            target_k,
-        )
-
-        if requested_target_k != target_k:
-            logger.warning(
-                "  Requested k=%s exceeds n_instances=%s; using k=%s.",
-                requested_target_k,
-                n_instances,
-                target_k,
-            )
-
-        if target_k < n_labels:
-            logger.warning(
-                "  Skipping k=%s because it is below the number of labels (%s).",
-                target_k,
-                n_labels,
-            )
-            continue
-
-        for alg_name, algo in algorithms:
-            n_init = algo.n_init
-            run_name = f"nodesx{safe_multiplier}_k{target_k}_ninit{n_init}"
-            meta_path = (
-                _algorithm_output_dir(
-                    output_dir,
-                    dataset_path.stem,
-                    alg_name,
-                    target_k,
-                    n_init,
-                    run_name,
-                )
-                / "metadata.json"
-            )
-            if skip_existing and meta_path.exists():
-                logger.info(
-                    "  Skipping %s | k=%s (x%s nodes) | n_init=%s; output already exists.",
-                    alg_name,
-                    target_k,
-                    cluster_multiplier,
-                    n_init,
-                )
-                continue
-
-            logger.info(
-                "  Running %s | k=%s (x%s nodes) | n_init=%s",
-                alg_name,
-                target_k,
-                cluster_multiplier,
-                n_init,
-            )
-
-            labels, duration = _run_algorithm(algo, X, y, target_k)
-
-            if labels is None:
-                logger.error("    %s failed to produce labels.", alg_name)
-                wcss = np.nan
-                n_clusters = 0
-            else:
-                wcss = overall_wcss(X, labels)
-                n_clusters = len(np.unique(labels))
-                _save_run_outputs(
-                    dataset_name=dataset_path.stem,
-                    alg_name=alg_name,
-                    k=target_k,
-                    k_mult=cluster_multiplier,
-                    n_init=n_init,
-                    X=X,
-                    y=y,
-                    labels=labels,
-                    duration=duration,
-                    wcss=wcss,
-                    output_dir=output_dir,
-                    benchmark_type="hac_strength",
-                    seed=seed,
-                    run_name=run_name,
-                    extra_metadata={
-                        "cluster_multiplier_basis": "nodes",
-                        "requested_cluster_multiplier": cluster_multiplier,
-                        "requested_n_clusters": requested_target_k,
-                        "effective_n_clusters": target_k,
-                        "target_k_was_capped": requested_target_k != target_k,
-                    },
-                )
-
-            logger.info(
-                "    -> Time: %.4fs | WCSS: %.4f | Clusters: %s",
-                duration,
-                wcss,
-                n_clusters,
+            _run_algorithms(
+                algorithms=algorithms,
+                dataset_name=dataset_path.stem,
+                X=X,
+                y=y,
+                target_k=case_target_k,
+                k_mult=k_mult,
+                output_dir=case_output_dir,
+                seed=seed,
+                skip_existing=skip_existing,
+                benchmark_type=case_type,
+                run_name_prefix=run_name,
+                extra_metadata=metadata,
+                postprocess=postprocess,
             )
 
 
@@ -562,181 +503,14 @@ def _compute_distance_metrics(X: np.ndarray, labels: np.ndarray, y: np.ndarray) 
     }
 
 
-def benchmark_com_madrid_avg_distance_to_centroid(
-    datasets_dir: Path,
-    output_dir: Path,
-    *,
-    seed: int,
-    n_inits: list[int] | tuple[int, ...],
-    subsample_size: int,
-    include_cop_kmeans: bool,
-    include_hac: bool,
-    skip_existing: bool,
-    include_bisecting_kmeans: bool,
-    include_precomputed_bisecting_kmeans: bool,
-    include_bp_kmeans: bool = True,
-) -> None:
-    """Benchmark average distance to centroid at k=10000 for Community of Madrid."""
-    dataset_path = datasets_dir / "com_madrid_osm_drive_nodes_split.parquet"
-    if not dataset_path.exists():
-        logger.error("Dataset not found: %s", dataset_path)
-        return
+def _distance_postprocessor(
+    X: np.ndarray, y: np.ndarray
+) -> Callable[[Path, np.ndarray, float], None]:
+    """Build the postprocessor used by special distance benchmarks."""
 
-    logger.info("Loading %s", dataset_path.name)
-    X, y = _load_dataset(dataset_path, "CUSEC")
-    target_k = 10000
-    logger.info("  Instances: %s | k=%s", len(X), target_k)
-
-    algorithms = _build_algorithms(
-        seed=seed,
-        n_inits=n_inits,
-        subsample_size=subsample_size,
-        include_cop_kmeans=include_cop_kmeans,
-        include_hac=include_hac,
-        include_bisecting_kmeans=include_bisecting_kmeans,
-        include_precomputed_bisecting_kmeans=include_precomputed_bisecting_kmeans,
-        include_bp_kmeans=include_bp_kmeans,
-    )
-
-    for alg_name, algo in algorithms:
-        n_init = algo.n_init
-        meta_path = (
-            _algorithm_output_dir(output_dir, dataset_path.stem, alg_name, target_k, n_init)
-            / "metadata.json"
-        )
-        if skip_existing and meta_path.exists():
-            logger.info(
-                "  Skipping %s | k=%s; output already exists.",
-                alg_name,
-                target_k,
-            )
-            continue
-
-        logger.info("  Running %s | k=%s | n_init=%s", alg_name, target_k, n_init)
-        labels, duration = _run_algorithm(algo, X, y, target_k)
-
-        if labels is None:
-            logger.error("    %s failed to produce labels.", alg_name)
-            continue
-
-        wcss = overall_wcss(X, labels)
-        _save_run_outputs(
-            dataset_name=dataset_path.stem,
-            alg_name=alg_name,
-            k=target_k,
-            k_mult=1.0,
-            n_init=n_init,
-            X=X,
-            y=y,
-            labels=labels,
-            duration=duration,
-            wcss=wcss,
-            output_dir=output_dir,
-            seed=seed,
-        )
-
+    def process(meta_path: Path, labels: np.ndarray, duration: float) -> None:
         dist_metrics = _compute_distance_metrics(X, labels, y)
-
         _update_metadata(meta_path, dist_metrics)
-
-        logger.info(
-            "    -> avg dist to node: %.2f m | max dist to node: %.2f m | "
-            "mean-max/label: %.2f m | clusters: %s | time: %.4fs",
-            dist_metrics["avg_dist_to_representative_node_m"],
-            dist_metrics["max_dist_to_representative_node_m"],
-            dist_metrics["mean_max_dist_per_label_to_representative_node_m"],
-            len(np.unique(labels)),
-            duration,
-        )
-
-
-def benchmark_castile_leon_max_response_time(
-    datasets_dir: Path,
-    output_dir: Path,
-    *,
-    seed: int,
-    n_inits: list[int] | tuple[int, ...],
-    subsample_size: int,
-    include_cop_kmeans: bool,
-    include_hac: bool,
-    skip_existing: bool,
-    include_bisecting_kmeans: bool,
-    include_precomputed_bisecting_kmeans: bool,
-    include_bp_kmeans: bool = True,
-) -> None:
-    """Benchmark: maximum response time at k=200 using province labels (Castile and León)."""
-    dataset_path = datasets_dir / "castile_and_leon_osm_drive_nodes.parquet"
-    if not dataset_path.exists():
-        logger.error("Dataset not found: %s", dataset_path)
-        return
-
-    logger.info("Loading %s", dataset_path.name)
-    X, y = _load_dataset(dataset_path, "CPRO")
-    target_k = 200
-    logger.info(
-        "  Instances: %s | unique provinces: %s | k=%s",
-        len(X),
-        len(np.unique(y)),
-        target_k,
-    )
-
-    if target_k > len(X):
-        logger.error("k=%s exceeds n_instances=%s. Aborting.", target_k, len(X))
-        return
-
-    algorithms = _build_algorithms(
-        seed=seed,
-        n_inits=n_inits,
-        subsample_size=subsample_size,
-        include_cop_kmeans=include_cop_kmeans,
-        include_hac=include_hac,
-        include_bisecting_kmeans=include_bisecting_kmeans,
-        include_precomputed_bisecting_kmeans=include_precomputed_bisecting_kmeans,
-        include_bp_kmeans=include_bp_kmeans,
-    )
-
-    for alg_name, algo in algorithms:
-        n_init = algo.n_init
-        # only benchmark n_init=8 for max response time
-        meta_path = (
-            _algorithm_output_dir(output_dir, dataset_path.stem, alg_name, target_k, n_init)
-            / "metadata.json"
-        )
-        if skip_existing and meta_path.exists():
-            logger.info(
-                "  Skipping %s | k=%s; output already exists.",
-                alg_name,
-                target_k,
-            )
-            continue
-
-        logger.info("  Running %s | k=%s | n_init=%s", alg_name, target_k, n_init)
-        labels, duration = _run_algorithm(algo, X, y, target_k)
-
-        if labels is None:
-            logger.error("    %s failed to produce labels.", alg_name)
-            continue
-
-        wcss = overall_wcss(X, labels)
-        _save_run_outputs(
-            dataset_name=dataset_path.stem,
-            alg_name=alg_name,
-            k=target_k,
-            k_mult=1.0,
-            n_init=n_init,
-            X=X,
-            y=y,
-            labels=labels,
-            duration=duration,
-            wcss=wcss,
-            output_dir=output_dir,
-            seed=seed,
-        )
-
-        dist_metrics = _compute_distance_metrics(X, labels, y)
-
-        _update_metadata(meta_path, {"response_time_s": duration, **dist_metrics})
-
         logger.info(
             "    -> time: %.4fs | avg dist to node: %.2f m | "
             "max dist to node: %.2f m | mean-max/label: %.2f m",
@@ -745,3 +519,5 @@ def benchmark_castile_leon_max_response_time(
             dist_metrics["max_dist_to_representative_node_m"],
             dist_metrics["mean_max_dist_per_label_to_representative_node_m"],
         )
+
+    return process

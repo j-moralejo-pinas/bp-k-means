@@ -7,12 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from bp_k_means.tools.benchmark import (
-    benchmark_castile_leon_max_response_time,
-    benchmark_com_madrid_avg_distance_to_centroid,
-    run_benchmark,
-    run_hac_strength_benchmark,
-)
+from bp_k_means.tools.benchmark import run_benchmark
 
 
 @dataclass(frozen=True)
@@ -23,12 +18,11 @@ class ExperimentConfig:
     benchmark_output_dir: Path
     analysis_output_dir: Path
     seed: int
-    k_multipliers: tuple[float, ...]
+    k: tuple[float, ...]
     n_inits: tuple[int, ...]
     subsample_size: int
     run_regular: bool
     run_hac_strength: bool
-    hac_strength_multiplier: float
     run_special: bool
     include_cop_kmeans: bool
     include_hac: bool
@@ -80,9 +74,9 @@ def load_config(config_path: Path) -> ExperimentConfig:
         msg = "configuration must contain a [benchmark] table"
         raise TypeError(msg)
 
-    k_multipliers = _read_positive_values(
-        _required_setting(settings, "k_multipliers"),
-        "k_multipliers",
+    k = _read_positive_values(
+        _required_setting(settings, "k"),
+        "k",
         float,
     )
     n_inits = _read_positive_values(
@@ -110,12 +104,11 @@ def load_config(config_path: Path) -> ExperimentConfig:
             "analysis_output_dir",
         ),
         seed=int(_required_setting(settings, "seed")),
-        k_multipliers=k_multipliers,
+        k=k,
         n_inits=n_inits,
         subsample_size=subsample_size,
         run_regular=bool(_required_setting(settings, "run_regular")),
         run_hac_strength=bool(_required_setting(settings, "run_hac_strength")),
-        hac_strength_multiplier=float(_required_setting(settings, "hac_strength_multiplier")),
         run_special=bool(_required_setting(settings, "run_special")),
         include_cop_kmeans=bool(_required_setting(settings, "include_cop_kmeans")),
         include_hac=bool(_required_setting(settings, "include_hac")),
@@ -133,7 +126,7 @@ def _config_for_json(config: ExperimentConfig) -> dict[str, object]:
     serialized["datasets_dir"] = str(config.datasets_dir)
     serialized["benchmark_output_dir"] = str(config.benchmark_output_dir)
     serialized["analysis_output_dir"] = str(config.analysis_output_dir)
-    serialized["k_multipliers"] = list(config.k_multipliers)
+    serialized["k"] = list(config.k)
     serialized["n_inits"] = list(config.n_inits)
     return serialized
 
@@ -150,64 +143,49 @@ def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) 
         encoding="utf-8",
     )
 
+    common_benchmark_args: dict[str, Any] = {
+        "datasets_dir": config.datasets_dir,
+        "output_dir": config.benchmark_output_dir,
+        "seed": config.seed,
+        "n_inits": config.n_inits,
+        "subsample_size": config.subsample_size,
+        "include_cop_kmeans": config.include_cop_kmeans,
+        "include_hac": config.include_hac,
+        "skip_existing": config.skip_existing,
+        "include_bisecting_kmeans": config.include_bisecting_kmeans,
+        "include_precomputed_bisecting_kmeans": config.include_precomputed_bisecting_kmeans,
+        "include_bp_kmeans": config.include_bp_kmeans,
+    }
+
     if config.run_regular:
         run_benchmark(
-            datasets_dir=config.datasets_dir,
-            output_dir=config.benchmark_output_dir,
-            seed=config.seed,
-            k_multipliers=config.k_multipliers,
-            n_inits=config.n_inits,
-            subsample_size=config.subsample_size,
-            include_cop_kmeans=config.include_cop_kmeans,
-            include_hac=config.include_hac,
-            skip_existing=config.skip_existing,
-            include_bisecting_kmeans=config.include_bisecting_kmeans,
-            include_precomputed_bisecting_kmeans=config.include_precomputed_bisecting_kmeans,
-            include_bp_kmeans=config.include_bp_kmeans,
+            **common_benchmark_args,
+            benchmark_type="regular",
+            k_values=config.k,
         )
 
     if config.run_hac_strength:
-        run_hac_strength_benchmark(
-            cluster_multiplier=config.hac_strength_multiplier,
-            datasets_dir=config.datasets_dir,
-            output_dir=config.benchmark_output_dir,
-            seed=config.seed,
-            n_inits=config.n_inits,
-            subsample_size=config.subsample_size,
-            include_cop_kmeans=config.include_cop_kmeans,
-            include_hac=config.include_hac,
-            skip_existing=config.skip_existing,
-            include_bisecting_kmeans=config.include_bisecting_kmeans,
-            include_precomputed_bisecting_kmeans=config.include_precomputed_bisecting_kmeans,
-            include_bp_kmeans=config.include_bp_kmeans,
+        run_benchmark(
+            **common_benchmark_args,
+            benchmark_type="hac_strength",
+            k_values=config.k,
         )
 
     if config.run_special:
-        benchmark_castile_leon_max_response_time(
-            datasets_dir=config.datasets_dir,
-            output_dir=config.benchmark_output_dir,
-            seed=config.seed,
-            n_inits=config.n_inits,
-            subsample_size=config.subsample_size,
-            include_cop_kmeans=config.include_cop_kmeans,
-            include_hac=config.include_hac,
-            skip_existing=config.skip_existing,
-            include_bisecting_kmeans=config.include_bisecting_kmeans,
-            include_precomputed_bisecting_kmeans=config.include_precomputed_bisecting_kmeans,
-            include_bp_kmeans=config.include_bp_kmeans,
+        run_benchmark(
+            **common_benchmark_args,
+            benchmark_type="special",
+            k_values=[200],
+            dataset_filename="castile_and_leon_osm_drive_nodes.parquet",
+            label_column="CPRO",
+            log_label_name="provinces",
         )
-        benchmark_com_madrid_avg_distance_to_centroid(
-            datasets_dir=config.datasets_dir,
-            output_dir=config.benchmark_output_dir,
-            seed=config.seed,
-            n_inits=config.n_inits,
-            subsample_size=config.subsample_size,
-            include_cop_kmeans=config.include_cop_kmeans,
-            include_hac=config.include_hac,
-            skip_existing=config.skip_existing,
-            include_bisecting_kmeans=config.include_bisecting_kmeans,
-            include_precomputed_bisecting_kmeans=config.include_precomputed_bisecting_kmeans,
-            include_bp_kmeans=config.include_bp_kmeans,
+        run_benchmark(
+            **common_benchmark_args,
+            benchmark_type="special",
+            k_values=[10000],
+            dataset_filename="com_madrid_osm_drive_nodes_split.parquet",
+            label_column="CUSEC",
         )
 
 

@@ -13,7 +13,7 @@ class BaseAlgo(ABC):
     def __init__(
         self,
         seed: int | np.random.Generator,
-        n_init: int,
+        n_init: int = 1,
     ) -> None:
         """Initialize common algorithm settings.
 
@@ -21,8 +21,9 @@ class BaseAlgo(ABC):
         ----------
         seed : int | np.random.Generator
             Seed or random generator used by the algorithm.
-        n_init : int
-            Number of initialization attempts when supported by the algorithm.
+        n_init : int, default=1
+            Number of initialization attempts when supported by the algorithm. Algorithms that do
+            not use multiple initializations can rely on the default.
 
         Raises
         ------

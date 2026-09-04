@@ -6,13 +6,12 @@ datasets_dir = "../data/datasets"
 benchmark_output_dir = "../output/hac"
 analysis_output_dir = "../output/analysis"
 seed = 42
-k_multipliers = [1.5, 2.0, 4.0]
+k = [1.5, 2.0, 4.0]
 n_inits = [1]
 subsample_size = 10
 
 run_regular = true
 run_hac_strength = false
-hac_strength_multiplier = 1.5
 run_special = false
 
 include_cop_kmeans = false
