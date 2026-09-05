@@ -94,3 +94,4 @@ def test_cop_wrapper_requires_labels_and_retains_best_feasible_result(
     assert model.fit_predict(X, y, 2) is model.labels_
     assert_label_pure(model.labels_, y)
     assert model.centroids_ is not None
+    assert_label_pure(model.predict(X, y), y)

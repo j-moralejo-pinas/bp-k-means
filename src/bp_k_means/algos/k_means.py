@@ -210,6 +210,15 @@ def kmeans(
 class KMeans(BaseAlgo):
     """Common-interface wrapper around Lloyd's k-means algorithm."""
 
+    def predict(
+        self,
+        X: ArrayLike,
+        y: ArrayLike | None = None,  # noqa: ARG002 - accepted for interface compatibility
+    ) -> "NDArray":
+        """Assign instances to the nearest fitted k-means centroid."""
+        X_array, _ = self._validate_prediction_input(X)
+        return self._select_lowest_cost_clusters(self._squared_centroid_distances(X_array))
+
     def __init__(
         self,
         max_iter: int = 300,

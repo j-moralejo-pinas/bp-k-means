@@ -3,7 +3,7 @@
 from heapq import heappop, heappush
 
 import numpy as np
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 
 from bp_k_means.algos.base_algo import BaseAlgo
 
@@ -329,7 +329,23 @@ def hac_ward_nnc_by_label(X: "np.ndarray", y: "np.ndarray", target_k: int) -> "n
     return _assign_ward_labels(active, cluster_members, n)
 
 
-class HACWard(BaseAlgo):
+class _WardPredictor(BaseAlgo):
+    """Shared prediction rule for fitted Ward hierarchy cuts."""
+
+    def predict(
+        self,
+        X: ArrayLike,
+        y: ArrayLike | None = None,
+    ) -> "NDArray":
+        """Assign instances by the Ward cost of joining each fitted cluster."""
+        X_array, y_array = self._validate_prediction_input(X, y)
+        assert self._cluster_sizes is not None
+        costs = self._squared_centroid_distances(X_array)
+        costs *= self._cluster_sizes / (self._cluster_sizes + 1)
+        return self._select_lowest_cost_clusters(costs, y_array)
+
+
+class HACWard(_WardPredictor):
     """Common-interface wrapper around label-constrained Ward HAC."""
 
     def fit(
@@ -363,10 +379,10 @@ class HACWard(BaseAlgo):
             msg = "HACWard requires original labels"
             raise ValueError(msg)
         labels = hac_ward_by_label(np.asarray(X), np.asarray(y), target_k)
-        return self._set_result(labels)
+        return self._set_cluster_result(X, y, labels)
 
 
-class HACWardNNC(BaseAlgo):
+class HACWardNNC(_WardPredictor):
     """Common-interface wrapper around nearest-neighbor-chain Ward HAC."""
 
     def fit(
@@ -400,4 +416,4 @@ class HACWardNNC(BaseAlgo):
             msg = "HACWardNNC requires original labels"
             raise ValueError(msg)
         labels = hac_ward_nnc_by_label(np.asarray(X), np.asarray(y), target_k)
-        return self._set_result(labels)
+        return self._set_cluster_result(X, y, labels)

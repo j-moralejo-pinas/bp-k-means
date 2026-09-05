@@ -39,6 +39,7 @@ Tracker = "https://github.com/j-moralejo-pinas/bp-k-means/issues"
 [project.scripts]
 bp-k-means-benchmark = "bp_k_means.main:main"
 bp-k-means-analyze = "bp_k_means.tools.analyze_benchmark:cli"
+bp-k-means-download-zenodo = "bp_k_means.tools.download_zenodo_dataset:main"
 
 
 [tool.hatch.version]

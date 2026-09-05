@@ -540,6 +540,16 @@ def _bp_kmeans_precomputed(
 class BPKMeans(BaseAlgo):
     """Common-interface wrapper around the boundary-preserving algorithm."""
 
+    def predict(
+        self,
+        X: ArrayLike,
+        y: ArrayLike | None = None,
+    ) -> "NDArray":
+        """Assign instances to BP-KMeans centroids selected for their source label."""
+        X_array, y_array = self._validate_prediction_input(X, y)
+        distances = self._squared_centroid_distances(X_array)
+        return self._select_lowest_cost_clusters(distances, y_array)
+
     def __init__(
         self,
         ranking_metric: RankingMetric = RankingMetric.M_ERL,
@@ -616,4 +626,4 @@ class BPKMeans(BaseAlgo):
             init_algorithm=self.init_algorithm,
             subsample_size=self.subsample_size,
         )
-        return self._set_result(labels)
+        return self._set_cluster_result(X_array, y_array, labels)

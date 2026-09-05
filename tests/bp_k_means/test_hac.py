@@ -140,6 +140,18 @@ def test_hac_wrappers_require_labels_and_store_labels(wrapper) -> None:
     assert model.fit(X, y, 3) is model
     assert model.labels_ is not None
     assert_label_pure(model.labels_, y)
+    assert_label_pure(model.predict(X, y), y)
+
+
+@pytest.mark.parametrize("wrapper", [HACWard, HACWardNNC])
+def test_hac_prediction_uses_ward_insertion_cost(wrapper) -> None:
+    X = np.array([[0.0], [4.0], [4.0], [4.0], [4.0]])
+    y = np.array(["a"] * len(X))
+    model = wrapper(seed=0).fit(X, y, 2)
+
+    assert model.labels_ is not None
+    singleton_cluster = model.labels_[0]
+    np.testing.assert_array_equal(model.predict([[2.2]], ["a"]), [singleton_cluster])
 
 
 def test_hac_rejects_a_target_below_the_number_of_labels() -> None:

@@ -169,3 +169,25 @@ def test_bisecting_wrappers_require_labels_and_store_results(wrapper) -> None:
     assert model.fit(X, y, 3) is model
     assert model.labels_ is not None
     assert_label_pure(model.labels_, y)
+    assert_label_pure(model.predict(X, y), y)
+
+
+@pytest.mark.parametrize("wrapper", [BisectingKMeansNoRefine, BisectingKMeansMRLNoRefine])
+def test_non_refined_bisecting_prediction_traverses_the_fitted_hierarchy(wrapper) -> None:
+    X = np.arange(7, dtype=float)[:, None]
+    y = np.array(["a"] * len(X))
+    model = wrapper(seed=1, n_init=3).fit(X, y, 4)
+
+    assert model.labels_ is not None
+    np.testing.assert_array_equal(model.predict(X, y), model.labels_)
+
+    point = np.array([[3.3]])
+    hierarchical_cluster = model.predict(point, np.array(["a"]))[0]
+    assert model.centroids_ is not None
+    assert model._cluster_ids is not None
+    nearest_leaf = model._cluster_ids[
+        np.argmin(np.sum((point[:, None, :] - model.centroids_[None, :, :]) ** 2, axis=2))
+    ]
+
+    assert hierarchical_cluster == model.labels_[4]
+    assert hierarchical_cluster != nearest_leaf

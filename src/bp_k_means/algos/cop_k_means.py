@@ -128,6 +128,16 @@ def cop_kmeans_by_label(
 class COPKMeans(BaseAlgo):
     """Common-interface wrapper around COP-KMeans."""
 
+    def predict(
+        self,
+        X: ArrayLike,
+        y: ArrayLike | None = None,
+    ) -> "NDArray":
+        """Assign instances to the nearest feasible fitted COP-KMeans cluster."""
+        X_array, y_array = self._validate_prediction_input(X, y)
+        distances = self._squared_centroid_distances(X_array)
+        return self._select_lowest_cost_clusters(distances, y_array)
+
     def __init__(
         self,
         max_iter: int = 300,
@@ -214,4 +224,7 @@ class COPKMeans(BaseAlgo):
         if best_labels is None or best_centroids is None:
             msg = "COPKMeans did not produce a feasible clustering"
             raise RuntimeError(msg)
-        return self._set_result(best_labels, best_centroids)
+        source_labels = np.asarray(
+            [y_array[best_labels == cluster][0] for cluster in np.unique(best_labels)]
+        )
+        return self._set_result(best_labels, best_centroids, source_labels)

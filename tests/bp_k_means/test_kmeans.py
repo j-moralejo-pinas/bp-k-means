@@ -99,6 +99,7 @@ def test_kmeans_wrapper_stores_centroids_and_fit_predict_returns_same_labels() -
     predicted = model.fit_predict(X, y=None, target_k=2)
 
     assert predicted is model.labels_
+    np.testing.assert_array_equal(model.predict(X), predicted)
     np.testing.assert_allclose(np.sort(model.centroids_, axis=0), [[0.5], [9.5]], atol=1e-12)
     assert np.isclose(np.sum((X - model.centroids_[predicted]) ** 2), 1.0)
 

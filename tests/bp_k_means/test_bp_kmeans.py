@@ -179,11 +179,26 @@ def test_bp_wrapper_requires_source_labels_and_stores_result(
     X, y = two_label_points
     model = BPKMeans(seed=0, n_init=1, subsample_size=2)
 
+    with pytest.raises(RuntimeError, match="fitted"):
+        model.predict(X)
+
+    model.fit(X, y, 2)
+    assert model.labels_ is not None
+    fitted_labels = model.labels_.copy()
+    unconstrained = model.predict(X)
+    assert len(np.unique(unconstrained)) == 2
+    constrained = model.predict(X, y)
+    assert_label_pure(constrained, y)
+    new_labels = model.predict(np.array([[0.25], [10.25]]), np.array(["left", "right"]))
+    assert_label_pure(new_labels, np.array(["left", "right"]))
+    np.testing.assert_array_equal(model.labels_, fitted_labels)
+
     with pytest.raises(ValueError, match="original labels"):
         model.fit(X, None, 2)
     fitted = model.fit(X, y, 3)
 
     assert fitted is model
+    assert model.labels_ is not None
     assert_label_pure(model.labels_, y)
     assert len(np.unique(model.labels_)) == 3
 

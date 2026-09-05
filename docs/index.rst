@@ -13,6 +13,9 @@ Contents
 
    Overview <README>
    Installation <installation>
+   Using the project <usage>
+   Reproducing benchmarks <benchmarks>
+   Benchmark analysis <analysis>
 
 .. toctree::
    :maxdepth: 2

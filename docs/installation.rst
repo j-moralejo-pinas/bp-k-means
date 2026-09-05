@@ -4,7 +4,9 @@ Installation
 Prerequisites
 -------------
 
-Python 3.13 or newer is required. Git is needed when installing directly from the repository.
+Python 3.13 or newer and Git are required. The project uses ``uv`` to create environments and
+install dependencies. Install ``uv`` by following the `official installation guide
+<https://docs.astral.sh/uv/getting-started/installation/>`_.
 
 User installation
 -----------------
@@ -15,16 +17,24 @@ Create an isolated environment and install the package:
 
     git clone https://github.com/j-moralejo-pinas/bp-k-means.git
     cd bp-k-means
-    python3.13 -m venv .venv
+    uv python install 3.13
+    uv sync
+
+``uv sync`` creates the project environment in ``.venv`` and installs the locked runtime
+dependencies. Activate it for direct command usage:
+
+.. code-block:: bash
+
     source .venv/bin/activate
-    python -m pip install .
+
+You can also run commands without activating the environment by prefixing them with ``uv run``.
 
 Verify the installation and public API:
 
 .. code-block:: bash
 
-    python -c "import bp_k_means; print(bp_k_means.__version__)"
-    python -c "from bp_k_means import bp_kmeans; print(bp_kmeans)"
+    uv run python -c "import bp_k_means; print(bp_k_means.__version__)"
+    uv run python -c "from bp_k_means import bp_kmeans; print(bp_kmeans)"
 
 Development installation
 ------------------------
@@ -33,37 +43,13 @@ Install the development and documentation dependencies:
 
 .. code-block:: bash
 
-    python -m pip install -e ".[dev,docs]"
+    uv sync --extra dev --extra docs
 
 Run the validation commands:
 
 .. code-block:: bash
 
-    pytest
-    ruff check .
-    pyright
-    sphinx-build -W -b html docs docs/_build/html
-
-Benchmark reproduction
-----------------------
-
-The reproducibility configuration is stored in ``experiments/default.toml``. Paths in that
-file are resolved relative to the configuration file. Datasets must be available under
-``data/datasets`` before running the benchmark:
-
-.. code-block:: bash
-
-    bp-k-means-benchmark --config experiments/default.toml
-    bp-k-means-analyze
-
-The analysis command uses the same configuration file to locate the benchmark input and analysis
-output. Pass ``--config`` to use a different experiment configuration.
-
-The benchmark records its effective configuration under
-``output/benchmark/experiment_config.json`` by default and
-stores the seed in each run's metadata. Dataset construction uses the source URLs and processing
-steps documented in :mod:`bp_k_means.tools.create_dataset`; data providers' terms and attribution
-requirements apply to any redistribution.
-
-COP-KMeans is available as an optional comparator. Set ``include_cop_kmeans = true`` in the TOML
-configuration to include it in the benchmark stages.
+    uv run pytest
+    uv run ruff check .
+    uv run pyright
+    uv run sphinx-build -W -b html docs docs/_build/html

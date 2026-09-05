@@ -7,6 +7,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 from bp_k_means.algos.base_algo import BaseAlgo
+from bp_k_means.algos.bisecting_tree import _assign_from_hierarchy, _BisectingTreeNode
 from bp_k_means.algos.k_means import kmeans, kmeans_plus_plus_init
 
 if TYPE_CHECKING:
@@ -337,13 +338,13 @@ def bisecting_kmeans_by_label_optimized(
     return labels_final
 
 
-def bisecting_kmeans_by_label_optimized_no_refine(
+def _fit_bisecting_kmeans_by_label_optimized_no_refine(
     X: "NDArray",
     y: "NDArray",
     target_k: int,
     seed: int | np.random.Generator,
     n_init: int,
-) -> "NDArray":
+) -> tuple["NDArray", dict[object, _BisectingTreeNode]]:
     """
     Divisive hierarchical clustering (bisecting k-means) with a label constraint.
 
@@ -372,10 +373,7 @@ def bisecting_kmeans_by_label_optimized_no_refine(
     rng = np.random.default_rng(seed)
     _, dim = X.shape
 
-    _, y_inverse = np.unique(y, return_inverse=True)
-
-    if target_k == n_samples:
-        return np.arange(n_samples)
+    unique_labels, y_inverse = np.unique(y, return_inverse=True)
 
     # Pre-calculate squared norms for WCSS optimization
     order = np.argsort(y_inverse)
@@ -394,6 +392,8 @@ def bisecting_kmeans_by_label_optimized_no_refine(
 
     centroids_per_label: list[NDArray] = []
     local_cluster_labels_per_label: list[NDArray] = []
+    nodes_per_label: list[list[_BisectingTreeNode]] = []
+    roots: dict[object, _BisectingTreeNode] = {}
 
     cluster_heap = []
     current_total_clusters = 0
@@ -405,6 +405,9 @@ def bisecting_kmeans_by_label_optimized_no_refine(
 
         local_labels = np.zeros(pts.shape[0], dtype=int)
         local_cluster_labels_per_label.append(local_labels)
+        root = _BisectingTreeNode(pts.mean(axis=0))
+        roots[unique_labels[label_idx]] = root
+        nodes_per_label.append([root])
 
         if pts.shape[0] < MIN_SPLIT_POINTS:
             X2_per_label.append(None)
@@ -456,6 +459,13 @@ def bisecting_kmeans_by_label_optimized_no_refine(
 
         centroids_per_label[lbl_idx] = new_centroids_arr
 
+        parent = nodes_per_label[lbl_idx][local_idx]
+        left = _BisectingTreeNode(best_sub_centroids[0])
+        right = _BisectingTreeNode(best_sub_centroids[1])
+        parent.children = (left, right)
+        nodes_per_label[lbl_idx][local_idx] = left
+        nodes_per_label[lbl_idx].append(right)
+
         # 2. Update labels
         new_idx = current_centroids.shape[0]
         indices_to_update = np.flatnonzero(mask)
@@ -480,13 +490,37 @@ def bisecting_kmeans_by_label_optimized_no_refine(
         l_centroids = centroids_per_label[lbl_idx]
 
         labels_final[l_indices] = local_cluster_labels_per_label[lbl_idx] + global_cluster_counter
+        for local_idx, node in enumerate(nodes_per_label[lbl_idx]):
+            node.cluster_id = global_cluster_counter + local_idx
         global_cluster_counter += l_centroids.shape[0]
 
-    return labels_final
+    return labels_final, roots
+
+
+def bisecting_kmeans_by_label_optimized_no_refine(
+    X: "NDArray",
+    y: "NDArray",
+    target_k: int,
+    seed: int | np.random.Generator,
+    n_init: int,
+) -> "NDArray":
+    """Run non-refined bisecting k-means and return its fitted labels."""
+    labels, _ = _fit_bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, seed, n_init)
+    return labels
 
 
 class BisectingKMeans(BaseAlgo):
     """Common-interface wrapper around refined bisecting k-means."""
+
+    def predict(
+        self,
+        X: ArrayLike,
+        y: ArrayLike | None = None,
+    ) -> "NDArray":
+        """Assign instances to the refined bisecting leaf centroids."""
+        X_array, y_array = self._validate_prediction_input(X, y)
+        distances = self._squared_centroid_distances(X_array)
+        return self._select_lowest_cost_clusters(distances, y_array)
 
     def __init__(
         self,
@@ -549,11 +583,24 @@ class BisectingKMeans(BaseAlgo):
             n_init=self.n_init,
             use_wcss_per_cluster=self.use_wcss_per_cluster,
         )
-        return self._set_result(labels)
+        return self._set_cluster_result(X_array, y_array, labels)
 
 
 class BisectingKMeansNoRefine(BaseAlgo):
     """Common-interface wrapper around non-refined bisecting k-means."""
+
+    def __init__(self, seed: int | np.random.Generator, n_init: int) -> None:
+        super().__init__(seed=seed, n_init=n_init)
+        self._hierarchy_roots: dict[object, _BisectingTreeNode] = {}
+
+    def predict(
+        self,
+        X: ArrayLike,
+        y: ArrayLike | None = None,
+    ) -> "NDArray":
+        """Assign instances by traversing the fitted bisecting hierarchy."""
+        X_array, y_array = self._validate_prediction_input(X, y)
+        return _assign_from_hierarchy(X_array, y_array, self._hierarchy_roots)
 
     def fit(
         self,
@@ -587,11 +634,11 @@ class BisectingKMeansNoRefine(BaseAlgo):
             raise ValueError(msg)
         X_array = np.asarray(X)
         y_array = np.asarray(y)
-        labels = bisecting_kmeans_by_label_optimized_no_refine(
+        labels, self._hierarchy_roots = _fit_bisecting_kmeans_by_label_optimized_no_refine(
             X_array,
             y_array,
             target_k,
             seed=self.seed,
             n_init=self.n_init,
         )
-        return self._set_result(labels)
+        return self._set_cluster_result(X_array, y_array, labels)

@@ -16,90 +16,61 @@ Boundary Preserving K-Means (BP-KMeans) is a label-constrained clustering
 algorithm. It preserves the boundaries defined by pre-existing labels while
 allocating additional clusters until the requested number of clusters is reached.
 
-The project includes configurable ranking and centroid initialization strategies,
-along with standard k-means, COP-KMeans, hierarchical agglomerative clustering,
-and optimized bisecting k-means implementations for comparison and benchmarking.
+The project includes configurable ranking and centroid initialization strategies, standard
+k-means, COP-KMeans, Ward hierarchical clustering, and optimized bisecting k-means implementations.
 
-Installation
+If you use this project in research, please cite the associated work. Citation metadata is
+provided in `CITATION.cff <CITATION.cff>`_.
+
+Quick Start
+-----------
+
+Install ``uv`` using the `official installation guide
+<https://docs.astral.sh/uv/getting-started/installation/>`_, then run the paper benchmark suite
+from a fresh checkout:
+
+.. code-block:: bash
+
+    git clone https://github.com/j-moralejo-pinas/bp-k-means.git
+    cd bp-k-means
+    uv python install 3.13
+    uv sync
+
+Download the benchmark datasets into ``data/datasets``, then run:
+
+.. code-block:: bash
+
+    uv run bp-k-means-download-zenodo
+    uv run bp-k-means-benchmark --config experiments/default.toml
+    uv run bp-k-means-analyze --config experiments/default.toml
+
+The default configuration is the shortest path through the paper benchmark workflow. It resumes
+completed cases, writes raw results to ``output/benchmark``, and writes tables and figures to
+``output/analysis``.
+
+Key Features
 ------------
 
-The package requires Python 3.13 or newer:
+* Label-pure clustering that never assigns points from different original labels to one cluster.
+* BP-KMeans with configurable ranking metrics, initialization strategies, and initialization
+  algorithms.
+* K-Means, COP-KMeans, Ward HAC, standard Bisecting K-Means, and Bisecting K-Means M_RL
+  comparison algorithms.
+* Reproducible benchmark configurations with deterministic seeds, multiple initializations, and
+  resumable output generation.
+* CSV tables, Parquet assignments, metadata, publication plots, relative WCSS, and runtime
+  analysis.
 
-.. code-block:: bash
-
-    python -m venv .venv
-    source .venv/bin/activate
-    python -m pip install .
-
-Core API
---------
-
-Run boundary-preserving clustering with a pre-existing label for each point:
-
-.. code-block:: python
-
-    import numpy as np
-
-    from bp_k_means import bp_kmeans
-
-    X = np.array([[0.0, 0.0], [1.0, 0.0], [5.0, 5.0], [6.0, 5.0]])
-    y = np.array(["left", "left", "right", "right"])
-    clusters = bp_kmeans(X, y, target_k=4, seed=42, n_init=1, subsample_size=10)
-
-The returned array contains one cluster assignment per row of ``X``. Clusters are
-label-pure: points with different values in ``y`` are never assigned to the same cluster.
-
-Reproducing the benchmark
---------------------------
-
-Datasets are expected in ``data/datasets``. The version-controlled benchmark configuration
-is ``experiments/default.toml``; its paths are relative to the configuration file. After
-obtaining the documented datasets, run:
-
-.. code-block:: bash
-
-    bp-k-means-benchmark --config experiments/default.toml
-
-The configured benchmark output directory receives the benchmark results and the effective
-configuration manifest. With the default configuration these are ``output/benchmark`` and
-``output/benchmark/experiment_config.json``. Benchmark results include elapsed time, WCSS
-statistics, cluster assignments, and the random seed used for the run.
-
-The benchmark and analysis paths, along with all benchmark parameters, must be specified in the
-TOML configuration; the checked-in ``experiments/default.toml`` provides the standard values.
-
-Set ``skip_existing = true`` to resume a partial benchmark: combinations that already have a
-``metadata.json`` output are skipped.
-
-COP-KMeans is available as an opt-in comparator; set ``include_cop_kmeans = true`` in the TOML
-configuration when it should be included.
-
-The two bisecting implementations can be controlled independently with
-``include_bisecting_kmeans`` and ``include_bisecting_kmeans_m_rl``.
-
-To generate figures and aggregate tables from those outputs, which are written to the configured
-analysis output directory (``output/analysis`` by default):
-
-.. code-block:: bash
-
-    bp-k-means-analyze
-
-The analysis command reads the same configuration file to locate the dataset, benchmark, and
-analysis directories. Use ``--config`` when running it with a different experiment file.
-
-The analysis compares BP-KMeans initialized with k-means++ against standard Bisecting KMeans;
-other benchmark algorithms and initialization variants are excluded from the analysis outputs.
-
-Data provenance and licensing must be reviewed before redistributing datasets generated from
-OpenStreetMap or INE sources. See the documentation for the source URLs and processing steps.
+See the `full documentation <docs/index.rst>`_ for installation, algorithm usage, benchmark
+configuration, and analysis output details.
 
 Documentation
 -------------
 
-- 📦 `Installation Guide <docs/installation.rst>`_ - Setup instructions and requirements
-- 📚 `API Reference <docs/api.rst>`_ - Public functions and classes
-- 🤝 `Contributing Guidelines <CONTRIBUTING.rst>`_ - Development standards and contribution process
-- 📄 `License <LICENSE.txt>`_ - License terms and usage rights
-- 👥 `Authors <AUTHORS.rst>`_ - Project contributors and maintainers
-- 📜 `Changelog <CHANGELOG.rst>`_ - Project history and version changes
-- 📜 `Code of Conduct <CODE_OF_CONDUCT.rst>`_ - Guidelines for participation and conduct
+* `Installation Guide <docs/installation.rst>`_ - Set up the project with ``uv``.
+* `Project Usage <docs/usage.rst>`_ - Use the base algorithms and common interfaces.
+* `Benchmark Reproduction <docs/benchmarks.rst>`_ - Download data, run benchmarks, and configure
+  additional cases.
+* `Benchmark Analysis <docs/analysis.rst>`_ - Understand generated tables and figures.
+* `API Reference <docs/index.rst>`_ - Browse the generated API documentation.
+* `Contributing Guidelines <CONTRIBUTING.rst>`_ - Development standards and contribution process.
