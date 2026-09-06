@@ -44,6 +44,14 @@ file, not the current working directory.
 * ``k``: positive multipliers used by regular and HAC-strength stages.
 * ``n_inits``: positive numbers of initialization attempts to benchmark.
 * ``subsample_size``: sample size used by subsampled k-means++ initialization.
+* ``bp_ranking_metrics``: BP-KMeans ranking metric names (``M_L``, ``M_C``, ``M_ERL``, or
+  ``M_RL``) to benchmark.
+* ``bp_init_strategies``: BP-KMeans centroid reinitialization strategy names (``I_LRI``,
+  ``I_ACL``, ``I_CRI``, or ``I_ACC``) to benchmark.
+* ``bp_init_algorithms``: BP-KMeans sampling/initialization algorithm names (``KMEANS_PLUS_PLUS``,
+  ``SUBSAMPLING_KMEANS_PLUS_PLUS``, or ``RANDOM_SAMPLING``) to benchmark.
+  The three BP lists are combined as a Cartesian product; each can contain one value to run a
+  single BP-KMeans configuration.
 * ``run_regular``: run the regular benchmark over ordinary datasets.
 * ``run_hac_strength``: run the HAC-strength stage, where requested clusters are based on node
   count.

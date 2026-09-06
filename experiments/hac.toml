@@ -9,6 +9,10 @@ seed = 42
 k = [1.5, 2.0, 4.0]
 n_inits = [1]
 subsample_size = 10
+# BP-KMeans settings are retained here for compatibility with the shared config schema.
+bp_ranking_metrics = ["M_L", "M_C", "M_ERL", "M_RL"]
+bp_init_strategies = ["I_LRI", "I_ACL", "I_CRI", "I_ACC"]
+bp_init_algorithms = ["KMEANS_PLUS_PLUS"]
 
 run_regular = true
 run_hac_strength = false

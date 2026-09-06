@@ -299,6 +299,9 @@ def _build_algorithms(
     seed: int,
     n_inits: list[int] | tuple[int, ...],
     subsample_size: int,
+    bp_ranking_metrics: list[RankingMetric] | tuple[RankingMetric, ...],
+    bp_init_strategies: list[InitStrategy] | tuple[InitStrategy, ...],
+    bp_init_algorithms: list[InitAlgorithm] | tuple[InitAlgorithm, ...],
     include_cop_kmeans: bool,
     include_hac: bool,
     include_bisecting_kmeans: bool,
@@ -309,19 +312,23 @@ def _build_algorithms(
     algorithms: list[tuple[str, BaseAlgo]] = []
 
     if include_bp_kmeans:
-        for ranking_metric in RankingMetric:
-            for init in InitStrategy:
-                for n_init in n_inits:
-                    name = f"BP-KMeans ({ranking_metric.name}, {init.name}, KMEANS_PLUS_PLUS)"
-                    algorithm = BPKMeans(
-                        seed=seed,
-                        n_init=n_init,
-                        ranking_metric=ranking_metric,
-                        init_strategy=init,
-                        init_algorithm=InitAlgorithm.KMEANS_PLUS_PLUS,
-                        subsample_size=subsample_size,
-                    )
-                    algorithms.append((name, algorithm))
+        for ranking_metric in bp_ranking_metrics:
+            for init in bp_init_strategies:
+                for init_algorithm in bp_init_algorithms:
+                    for n_init in n_inits:
+                        name = (
+                            f"BP-KMeans ({ranking_metric.name}, {init.name}, "
+                            f"{init_algorithm.name})"
+                        )
+                        algorithm = BPKMeans(
+                            seed=seed,
+                            n_init=n_init,
+                            ranking_metric=ranking_metric,
+                            init_strategy=init,
+                            init_algorithm=init_algorithm,
+                            subsample_size=subsample_size,
+                        )
+                        algorithms.append((name, algorithm))
 
     for n_init in n_inits:
         if include_cop_kmeans:
@@ -351,6 +358,9 @@ def run_benchmark(
     seed: int,
     n_inits: list[int] | tuple[int, ...],
     subsample_size: int,
+    bp_ranking_metrics: list[RankingMetric] | tuple[RankingMetric, ...],
+    bp_init_strategies: list[InitStrategy] | tuple[InitStrategy, ...],
+    bp_init_algorithms: list[InitAlgorithm] | tuple[InitAlgorithm, ...],
     include_cop_kmeans: bool,
     include_hac: bool,
     skip_existing: bool,
@@ -371,6 +381,9 @@ def run_benchmark(
         seed=seed,
         n_inits=n_inits,
         subsample_size=subsample_size,
+        bp_ranking_metrics=bp_ranking_metrics,
+        bp_init_strategies=bp_init_strategies,
+        bp_init_algorithms=bp_init_algorithms,
         include_cop_kmeans=include_cop_kmeans,
         include_hac=include_hac,
         include_bisecting_kmeans=include_bisecting_kmeans,

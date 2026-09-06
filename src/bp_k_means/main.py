@@ -4,10 +4,14 @@ import argparse
 import json
 import tomllib
 from dataclasses import asdict, dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
+from bp_k_means.algos.bp_kmeans import InitAlgorithm, InitStrategy, RankingMetric
 from bp_k_means.tools.benchmark import run_benchmark
+
+EnumValue = TypeVar("EnumValue", bound=Enum)
 
 
 @dataclass(frozen=True)
@@ -21,6 +25,9 @@ class ExperimentConfig:
     k: tuple[float, ...]
     n_inits: tuple[int, ...]
     subsample_size: int
+    bp_ranking_metrics: tuple[RankingMetric, ...]
+    bp_init_strategies: tuple[InitStrategy, ...]
+    bp_init_algorithms: tuple[InitAlgorithm, ...]
     run_regular: bool
     run_hac_strength: bool
     run_special: bool
@@ -64,6 +71,23 @@ def _required_setting(settings: dict, field_name: str) -> Any:
     return settings[field_name]
 
 
+def _read_enum_values(
+    value: object,
+    field_name: str,
+    enum_type: type[EnumValue],
+) -> tuple[EnumValue, ...]:
+    if not isinstance(value, (list, tuple)) or not value:
+        msg = f"{field_name} must be a non-empty array of enum names"
+        raise ValueError(msg)
+
+    try:
+        return tuple(enum_type[item] for item in value)
+    except (KeyError, TypeError) as exc:
+        valid_values = ", ".join(member.name for member in enum_type)
+        msg = f"{field_name} must contain only valid {enum_type.__name__} names: {valid_values}"
+        raise ValueError(msg) from exc
+
+
 def load_config(config_path: Path) -> ExperimentConfig:
     """Load and validate an experiment configuration from TOML."""
     with config_path.open("rb") as config_file:
@@ -88,6 +112,21 @@ def load_config(config_path: Path) -> ExperimentConfig:
     if subsample_size < 1:
         msg = "subsample_size must be >= 1"
         raise ValueError(msg)
+    bp_ranking_metrics = _read_enum_values(
+        _required_setting(settings, "bp_ranking_metrics"),
+        "bp_ranking_metrics",
+        RankingMetric,
+    )
+    bp_init_strategies = _read_enum_values(
+        _required_setting(settings, "bp_init_strategies"),
+        "bp_init_strategies",
+        InitStrategy,
+    )
+    bp_init_algorithms = _read_enum_values(
+        _required_setting(settings, "bp_init_algorithms"),
+        "bp_init_algorithms",
+        InitAlgorithm,
+    )
 
     return ExperimentConfig(
         datasets_dir=_resolve_path(
@@ -107,6 +146,9 @@ def load_config(config_path: Path) -> ExperimentConfig:
         k=k,
         n_inits=n_inits,
         subsample_size=subsample_size,
+        bp_ranking_metrics=bp_ranking_metrics,
+        bp_init_strategies=bp_init_strategies,
+        bp_init_algorithms=bp_init_algorithms,
         run_regular=bool(_required_setting(settings, "run_regular")),
         run_hac_strength=bool(_required_setting(settings, "run_hac_strength")),
         run_special=bool(_required_setting(settings, "run_special")),
@@ -128,6 +170,9 @@ def _config_for_json(config: ExperimentConfig) -> dict[str, object]:
     serialized["analysis_output_dir"] = str(config.analysis_output_dir)
     serialized["k"] = list(config.k)
     serialized["n_inits"] = list(config.n_inits)
+    serialized["bp_ranking_metrics"] = [metric.name for metric in config.bp_ranking_metrics]
+    serialized["bp_init_strategies"] = [strategy.name for strategy in config.bp_init_strategies]
+    serialized["bp_init_algorithms"] = [algorithm.name for algorithm in config.bp_init_algorithms]
     return serialized
 
 
@@ -149,6 +194,9 @@ def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) 
         "seed": config.seed,
         "n_inits": config.n_inits,
         "subsample_size": config.subsample_size,
+        "bp_ranking_metrics": config.bp_ranking_metrics,
+        "bp_init_strategies": config.bp_init_strategies,
+        "bp_init_algorithms": config.bp_init_algorithms,
         "include_cop_kmeans": config.include_cop_kmeans,
         "include_hac": config.include_hac,
         "skip_existing": config.skip_existing,
