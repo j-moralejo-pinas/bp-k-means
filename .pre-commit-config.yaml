@@ -83,10 +83,12 @@ repos:
 #     args: ['-c', 'pyproject.toml']
 
 # Check dependencies for security vulnerabilities:
-# - repo: https://github.com/pypa/pip-audit
-#   rev: v2.10.0
-#   hooks:
-#   - id: pip-audit
+- repo: https://github.com/pypa/pip-audit
+  rev: v2.10.0
+  hooks:
+  - id: pip-audit
+    args: [--path, .venv]
+    pass_filenames: false
 
 ##########################################
 ## Everything below this line is unused ##
