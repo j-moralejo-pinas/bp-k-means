@@ -8,10 +8,10 @@ import pytest
 from conftest import assert_label_pure, direct_wcss
 
 from bp_k_means.algos.cop_k_means import (
-    COPKMeans,
+    COPKMeansCannotLink,
     _assign_points,
     _update_centroids,
-    cop_kmeans_by_label,
+    cop_kmeans_cannot_link,
 )
 
 
@@ -66,7 +66,7 @@ def test_cop_kmeans_is_label_pure_and_returns_cluster_means(
     two_label_points: tuple[np.ndarray, np.ndarray], ensure_label: bool,
 ) -> None:
     X, y = two_label_points
-    labels, centroids = cop_kmeans_by_label(
+    labels, centroids = cop_kmeans_cannot_link(
         X, y, 2, seed=3, init_ensure_label=ensure_label,
     )
 
@@ -80,17 +80,15 @@ def test_cop_kmeans_is_label_pure_and_returns_cluster_means(
 
 def test_cop_kmeans_rejects_fewer_clusters_than_labels() -> None:
     with pytest.raises(ValueError, match="number of labels"):
-        cop_kmeans_by_label(np.array([[0.0], [1.0]]), np.array(["a", "b"]), 1, seed=0)
+        cop_kmeans_cannot_link(np.array([[0.0], [1.0]]), np.array(["a", "b"]), 1, seed=0)
 
 
-def test_cop_wrapper_requires_labels_and_retains_best_feasible_result(
+def test_cop_wrapper_retains_best_feasible_result(
     two_label_points: tuple[np.ndarray, np.ndarray],
 ) -> None:
     X, y = two_label_points
-    model = COPKMeans(seed=0, n_init=2)
+    model = COPKMeansCannotLink(seed=0, n_init=2)
 
-    with pytest.raises(ValueError, match="requires original labels"):
-        model.fit(X, None, 2)
     assert model.fit_predict(X, y, 2) is model.labels_
     assert_label_pure(model.labels_, y)
     assert model.centroids_ is not None

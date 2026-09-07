@@ -518,17 +518,15 @@ class BisectingKMeansMRL(BaseAlgo):
     def predict(
         self,
         X: ArrayLike,
-        y: ArrayLike | None = None,
+        y: ArrayLike,
     ) -> "NDArray":
         """Assign instances to the refined M_RL bisecting leaf centroids."""
-        X_array, y_array = self._validate_prediction_input(X, y)
-        distances = self._squared_centroid_distances(X_array)
-        return self._select_lowest_cost_clusters(distances, y_array)
+        return self._predict_nearest_centroid(X, y)
 
     def fit(
         self,
         X: ArrayLike,
-        y: ArrayLike | None,
+        y: ArrayLike,
         target_k: int,
     ) -> "BisectingKMeansMRL":
         """Fit refined M_RL bisecting k-means.
@@ -537,7 +535,7 @@ class BisectingKMeansMRL(BaseAlgo):
         ----------
         X : ArrayLike
             Feature matrix.
-        y : ArrayLike | None
+        y : ArrayLike
             Original labels that constrain cluster membership.
         target_k : int
             Requested number of clusters.
@@ -550,11 +548,8 @@ class BisectingKMeansMRL(BaseAlgo):
         Raises
         ------
         ValueError
-            If original labels are not provided.
+            If the requested cluster count is infeasible.
         """
-        if y is None:
-            msg = "BisectingKMeansMRL requires original labels"
-            raise ValueError(msg)
         X_array = np.asarray(X)
         y_array = np.asarray(y)
         labels = bisecting_kmeans_m_rl_by_label_optimized(
@@ -577,7 +572,7 @@ class BisectingKMeansMRLNoRefine(BaseAlgo):
     def predict(
         self,
         X: ArrayLike,
-        y: ArrayLike | None = None,
+        y: ArrayLike,
     ) -> "NDArray":
         """Assign instances by traversing the fitted M_RL bisecting hierarchy."""
         X_array, y_array = self._validate_prediction_input(X, y)
@@ -586,7 +581,7 @@ class BisectingKMeansMRLNoRefine(BaseAlgo):
     def fit(
         self,
         X: ArrayLike,
-        y: ArrayLike | None,
+        y: ArrayLike,
         target_k: int,
     ) -> "BisectingKMeansMRLNoRefine":
         """Fit non-refined M_RL bisecting k-means.
@@ -595,7 +590,7 @@ class BisectingKMeansMRLNoRefine(BaseAlgo):
         ----------
         X : ArrayLike
             Feature matrix.
-        y : ArrayLike | None
+        y : ArrayLike
             Original labels that constrain cluster membership.
         target_k : int
             Requested number of clusters.
@@ -608,11 +603,8 @@ class BisectingKMeansMRLNoRefine(BaseAlgo):
         Raises
         ------
         ValueError
-            If original labels are not provided.
+            If the requested cluster count is infeasible.
         """
-        if y is None:
-            msg = "BisectingKMeansMRLNoRefine requires original labels"
-            raise ValueError(msg)
         X_array = np.asarray(X)
         y_array = np.asarray(y)
         labels, self._hierarchy_roots = _fit_bisecting_kmeans_m_rl_by_label_optimized_no_refine(

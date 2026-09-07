@@ -7,7 +7,6 @@ import numpy as np
 import pytest
 
 from bp_k_means.algos.k_means import (
-    KMeans,
     kmeans,
     kmeans_plus_plus_init,
     random_init,
@@ -90,20 +89,3 @@ def test_kmeans_repairs_an_empty_cluster_using_the_worst_point() -> None:
 def test_kmeans_rejects_an_initialization_with_the_wrong_cluster_count() -> None:
     with pytest.raises(ValueError, match="Expected 2 centroids"):
         kmeans(np.array([[0.0], [1.0]]), 2, seed=0, init_centroids=np.array([[0.0]]))
-
-
-def test_kmeans_wrapper_stores_centroids_and_fit_predict_returns_same_labels() -> None:
-    X = np.array([[0.0], [1.0], [9.0], [10.0]])
-    model = KMeans(seed=5, n_init=3)
-
-    predicted = model.fit_predict(X, y=None, target_k=2)
-
-    assert predicted is model.labels_
-    np.testing.assert_array_equal(model.predict(X), predicted)
-    np.testing.assert_allclose(np.sort(model.centroids_, axis=0), [[0.5], [9.5]], atol=1e-12)
-    assert np.isclose(np.sum((X - model.centroids_[predicted]) ** 2), 1.0)
-
-
-def test_kmeans_wrapper_rejects_zero_initializations() -> None:
-    with pytest.raises(ValueError, match="n_init"):
-        KMeans(seed=0, n_init=0)

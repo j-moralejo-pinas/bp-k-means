@@ -1,9 +1,7 @@
 """Core k-means initialization and clustering routines."""
 
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
-
-from bp_k_means.algos.base_algo import BaseAlgo
+from numpy.typing import NDArray
 
 
 def kmeans_plus_plus_init(
@@ -19,7 +17,6 @@ def kmeans_plus_plus_init(
 
     X2 = np.einsum("ij,ij->i", X, X)
 
-    start_idx = 0
     if existing_centroids is not None and len(existing_centroids) > 0:
         n_existing = existing_centroids.shape[0]
         if n_existing > k:
@@ -78,8 +75,7 @@ def subsampled_kmeans_plus_plus_init(
     rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
     n = X.shape[0]
 
-    actual_size = min(subsample_size, n)
-    sub_idx = rng.choice(n, size=actual_size, replace=False)
+    sub_idx = rng.choice(n, size=min(subsample_size, n), replace=False)
     X_sub = X[sub_idx]
 
     return kmeans_plus_plus_init(X_sub, k, seed=rng, existing_centroids=existing_centroids)
@@ -149,8 +145,7 @@ def kmeans(
 
     labels = np.full(n, -1, dtype=int)
 
-    if X2 is None:
-        X2 = np.einsum("ij,ij->i", X, X)
+    X2 = np.einsum("ij,ij->i", X, X) if X2 is None else X2
     assert X2 is not None
 
     for _ in range(max_iter):
@@ -163,7 +158,6 @@ def kmeans(
         new_labels = np.argmin(dist, axis=1)
 
         if np.array_equal(labels, new_labels):
-            labels = new_labels
             break
         labels = new_labels
 
@@ -205,82 +199,3 @@ def kmeans(
                     point_cost[donor_mask] = np.einsum("ij,ij->i", diff, diff)
 
     return labels, centroids
-
-
-class KMeans(BaseAlgo):
-    """Common-interface wrapper around Lloyd's k-means algorithm."""
-
-    def predict(
-        self,
-        X: ArrayLike,
-        y: ArrayLike | None = None,  # noqa: ARG002 - accepted for interface compatibility
-    ) -> "NDArray":
-        """Assign instances to the nearest fitted k-means centroid."""
-        X_array, _ = self._validate_prediction_input(X)
-        return self._select_lowest_cost_clusters(self._squared_centroid_distances(X_array))
-
-    def __init__(
-        self,
-        max_iter: int = 300,
-        *,
-        seed: int | np.random.Generator,
-        n_init: int,
-    ) -> None:
-        """Initialize a k-means algorithm.
-
-        Parameters
-        ----------
-        max_iter : int
-            Maximum number of Lloyd iterations per initialization.
-        seed : int | np.random.Generator
-            Seed or random generator used for initialization.
-        n_init : int
-            Number of independent initializations.
-        """
-        super().__init__(seed=seed, n_init=n_init)
-        self.max_iter = max_iter
-
-    def fit(
-        self,
-        X: ArrayLike,
-        y: ArrayLike | None,  # noqa: ARG002 - accepted for interface compatibility
-        target_k: int,
-    ) -> "KMeans":
-        """Fit k-means and store the best labels and centroids.
-
-        Parameters
-        ----------
-        X : ArrayLike
-            Feature matrix.
-        y : ArrayLike | None
-            Ignored labels, accepted for interface compatibility.
-        target_k : int
-            Requested number of clusters.
-
-        Returns
-        -------
-        KMeans
-            The fitted algorithm instance.
-        """
-        X_array = np.asarray(X)
-        rng = np.random.default_rng(self.seed) if isinstance(self.seed, int) else self.seed
-        best_wcss = float("inf")
-        best_labels = None
-        best_centroids = None
-
-        for _ in range(self.n_init):
-            labels, centroids = kmeans(
-                X_array,
-                target_k,
-                max_iter=self.max_iter,
-                seed=rng,
-            )
-            wcss = float(np.sum((X_array - centroids[labels]) ** 2))
-            if wcss < best_wcss:
-                best_wcss = wcss
-                best_labels = labels
-                best_centroids = centroids
-
-        assert best_labels is not None
-        assert best_centroids is not None
-        return self._set_result(best_labels, best_centroids)

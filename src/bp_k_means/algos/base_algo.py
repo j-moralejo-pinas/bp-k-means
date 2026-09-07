@@ -45,7 +45,7 @@ class BaseAlgo(ABC):
     def fit(
         self,
         X: ArrayLike,
-        y: ArrayLike | None,
+        y: ArrayLike,
         target_k: int,
     ) -> Self:
         """Fit the algorithm and store its cluster labels.
@@ -54,8 +54,8 @@ class BaseAlgo(ABC):
         ----------
         X : ArrayLike
             Feature matrix with shape ``(n_samples, n_features)``.
-        y : ArrayLike | None
-            Optional labels used by constrained algorithms.
+        y : ArrayLike
+            Labels used by constrained algorithms.
         target_k : int
             Requested number of clusters.
 
@@ -69,7 +69,7 @@ class BaseAlgo(ABC):
     def fit_predict(
         self,
         X: ArrayLike,
-        y: ArrayLike | None,
+        y: ArrayLike,
         target_k: int,
     ) -> NDArray:
         """Fit the algorithm, retain its prediction state, and return its cluster labels.
@@ -78,8 +78,8 @@ class BaseAlgo(ABC):
         ----------
         X : ArrayLike
             Feature matrix with shape ``(n_samples, n_features)``.
-        y : ArrayLike | None
-            Optional labels used by constrained algorithms.
+        y : ArrayLike
+            Labels used by constrained algorithms.
         target_k : int
             Requested number of clusters.
 
@@ -103,14 +103,9 @@ class BaseAlgo(ABC):
     def predict(
         self,
         X: ArrayLike,
-        y: ArrayLike | None = None,
+        y: ArrayLike,
     ) -> NDArray:
-        """Assign clusters while optionally respecting one label per input instance.
-
-        Predictions use the cluster state learned by ``fit``. If ``y`` is provided for a
-        label-constrained algorithm, only clusters trained from the corresponding label are
-        considered. If ``y`` is omitted, all trained clusters are considered.
-        """
+        """Assign clusters while respecting one label per input instance."""
         raise NotImplementedError
 
     def _set_cluster_result(
@@ -130,9 +125,9 @@ class BaseAlgo(ABC):
     def _validate_prediction_input(
         self,
         X: ArrayLike,
-        y: ArrayLike | None = None,
-    ) -> tuple[NDArray, NDArray | None]:
-        """Validate prediction inputs without defining an assignment rule."""
+        y: ArrayLike,
+    ) -> tuple[NDArray, NDArray]:
+        """Validate prediction inputs."""
         if self.centroids_ is None or self._cluster_ids is None:
             msg = "The algorithm must be fitted before calling predict"
             raise RuntimeError(msg)
@@ -142,8 +137,6 @@ class BaseAlgo(ABC):
             msg = f"Expected input with {self.centroids_.shape[1]} features"
             raise ValueError(msg)
 
-        if y is None:
-            return X_array, None
         y_array = np.asarray(y)
         if y_array.shape != (X_array.shape[0],):
             msg = "y must contain one label per input instance"
@@ -155,20 +148,24 @@ class BaseAlgo(ABC):
         assert self.centroids_ is not None
         return np.sum((X[:, None, :] - self.centroids_[None, :, :]) ** 2, axis=2)
 
+    def _predict_nearest_centroid(self, X: ArrayLike, y: ArrayLike) -> NDArray:
+        """Assign samples to their nearest fitted centroid, respecting labels."""
+        X_array, y_array = self._validate_prediction_input(X, y)
+        return self._select_lowest_cost_clusters(self._squared_centroid_distances(X_array), y_array)
+
     def _select_lowest_cost_clusters(
         self,
         costs: NDArray,
-        y: NDArray | None = None,
+        y: NDArray,
     ) -> NDArray:
-        """Select minimum-cost fitted clusters, optionally constrained by source label."""
+        """Select minimum-cost fitted clusters for each source label."""
         assert self._cluster_ids is not None
-        if y is not None:
-            assert self._cluster_source_labels is not None
-            compatible = y[:, None] == self._cluster_source_labels[None, :]
-            if not np.all(np.any(compatible, axis=1)):
-                msg = "No fitted cluster is available for at least one input label"
-                raise ValueError(msg)
-            costs = np.where(compatible, costs, np.inf)
+        assert self._cluster_source_labels is not None
+        compatible = y[:, None] == self._cluster_source_labels[None, :]
+        if not np.all(np.any(compatible, axis=1)):
+            msg = "No fitted cluster is available for at least one input label"
+            raise ValueError(msg)
+        costs = np.where(compatible, costs, np.inf)
         return self._cluster_ids[np.argmin(costs, axis=1)]
 
     def _set_result(

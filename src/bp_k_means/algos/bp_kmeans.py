@@ -314,11 +314,8 @@ def bp_kmeans(
         return np.arange(n_samples)
 
     # Global cluster ID tracking: each label starts with one cluster
-    global_clusters_per_label: dict[int, list[int]] = {}
-    current_cluster_id = 0
-    for label in labels:
-        global_clusters_per_label[label] = [current_cluster_id]
-        current_cluster_id += 1
+    global_clusters_per_label = {label: [label] for label in labels}
+    current_cluster_id = n_labels
 
     # Pre-organize data by label (sorted for cache-friendly access)
     order = np.argsort(y)
@@ -330,10 +327,8 @@ def bp_kmeans(
 
     groups = np.split(X_sorted, split_indices)
     idx_groups = np.split(order, split_indices)
-    unique_y_vals = [int(c) for c in np.nonzero(counts)[0]]
-
-    points_per_label = dict(zip(unique_y_vals, groups, strict=True))
-    indices_per_label = dict(zip(unique_y_vals, idx_groups, strict=True))
+    points_per_label = dict(enumerate(groups))
+    indices_per_label = dict(enumerate(idx_groups))
 
     # Per-label state: centroids, local cluster labels, WCSS, precomputed squared norms
     centroids_per_label: dict[int, NDArray] = {}
@@ -543,12 +538,10 @@ class BPKMeans(BaseAlgo):
     def predict(
         self,
         X: ArrayLike,
-        y: ArrayLike | None = None,
+        y: ArrayLike,
     ) -> "NDArray":
         """Assign instances to BP-KMeans centroids selected for their source label."""
-        X_array, y_array = self._validate_prediction_input(X, y)
-        distances = self._squared_centroid_distances(X_array)
-        return self._select_lowest_cost_clusters(distances, y_array)
+        return self._predict_nearest_centroid(X, y)
 
     def __init__(
         self,
@@ -586,7 +579,7 @@ class BPKMeans(BaseAlgo):
     def fit(
         self,
         X: ArrayLike,
-        y: ArrayLike | None,
+        y: ArrayLike,
         target_k: int,
     ) -> "BPKMeans":
         """Fit BP-KMeans and store the resulting cluster labels.
@@ -595,7 +588,7 @@ class BPKMeans(BaseAlgo):
         ----------
         X : ArrayLike
             Feature matrix.
-        y : ArrayLike | None
+        y : ArrayLike
             Original labels that constrain cluster membership.
         target_k : int
             Requested number of clusters.
@@ -608,11 +601,8 @@ class BPKMeans(BaseAlgo):
         Raises
         ------
         ValueError
-            If original labels are not provided.
+            If the requested cluster count or initialization is infeasible.
         """
-        if y is None:
-            msg = "BPKMeans requires original labels"
-            raise ValueError(msg)
         X_array = np.asarray(X)
         y_array = np.asarray(y)
         labels = bp_kmeans(

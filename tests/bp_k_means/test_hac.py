@@ -130,13 +130,11 @@ def test_hac_variants_return_identity_at_one_cluster_per_point(algorithm) -> Non
 
 
 @pytest.mark.parametrize("wrapper", [HACWard, HACWardNNC])
-def test_hac_wrappers_require_labels_and_store_labels(wrapper) -> None:
+def test_hac_wrappers_store_labels(wrapper) -> None:
     X = np.array([[0.0], [1.0], [10.0], [11.0]])
     y = np.array(["a", "a", "b", "b"])
     model = wrapper(seed=0)
 
-    with pytest.raises(ValueError, match="requires original labels"):
-        model.fit(X, None, 2)
     assert model.fit(X, y, 3) is model
     assert model.labels_ is not None
     assert_label_pure(model.labels_, y)

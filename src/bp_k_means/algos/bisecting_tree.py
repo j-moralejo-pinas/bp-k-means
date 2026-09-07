@@ -15,21 +15,17 @@ class _BisectingTreeNode:
 
 def _assign_from_hierarchy(
     X: NDArray,
-    y: NDArray | None,
+    y: NDArray,
     roots_by_label: dict[object, _BisectingTreeNode],
 ) -> NDArray:
     """Assign samples by following fitted centroid splits from root to leaf."""
-    roots = list(roots_by_label.values())
     predictions = np.empty(X.shape[0], dtype=int)
     for idx, point in enumerate(X):
-        if y is None:
-            node = min(roots, key=lambda root: np.sum((point - root.centroid) ** 2))
-        else:
-            label = y[idx]
-            if label not in roots_by_label:
-                msg = f"No fitted bisecting hierarchy is available for label {label!r}"
-                raise ValueError(msg)
-            node = roots_by_label[label]
+        label = y[idx]
+        if label not in roots_by_label:
+            msg = f"No fitted bisecting hierarchy is available for label {label!r}"
+            raise ValueError(msg)
+        node = roots_by_label[label]
         while node.children is not None:
             node = min(
                 node.children,

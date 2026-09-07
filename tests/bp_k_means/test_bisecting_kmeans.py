@@ -159,13 +159,11 @@ def test_bisecting_variants_reject_infeasible_targets(algorithm) -> None:
         BisectingKMeansMRLNoRefine,
     ],
 )
-def test_bisecting_wrappers_require_labels_and_store_results(wrapper) -> None:
+def test_bisecting_wrappers_store_results(wrapper) -> None:
     X = np.array([[0.0], [1.0], [10.0], [11.0]])
     y = np.array(["a", "a", "b", "b"])
     model = wrapper(seed=0, n_init=1)
 
-    with pytest.raises(ValueError, match="original labels"):
-        model.fit(X, None, 2)
     assert model.fit(X, y, 3) is model
     assert model.labels_ is not None
     assert_label_pure(model.labels_, y)

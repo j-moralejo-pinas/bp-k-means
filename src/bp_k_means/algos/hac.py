@@ -335,7 +335,7 @@ class _WardPredictor(BaseAlgo):
     def predict(
         self,
         X: ArrayLike,
-        y: ArrayLike | None = None,
+        y: ArrayLike,
     ) -> "NDArray":
         """Assign instances by the Ward cost of joining each fitted cluster."""
         X_array, y_array = self._validate_prediction_input(X, y)
@@ -351,7 +351,7 @@ class HACWard(_WardPredictor):
     def fit(
         self,
         X: ArrayLike,
-        y: ArrayLike | None,
+        y: ArrayLike,
         target_k: int,
     ) -> "HACWard":
         """Fit label-constrained Ward hierarchical clustering.
@@ -360,7 +360,7 @@ class HACWard(_WardPredictor):
         ----------
         X : ArrayLike
             Feature matrix.
-        y : ArrayLike | None
+        y : ArrayLike
             Original labels that constrain merges.
         target_k : int
             Requested number of clusters.
@@ -373,13 +373,11 @@ class HACWard(_WardPredictor):
         Raises
         ------
         ValueError
-            If original labels are not provided or the target is infeasible.
+            If the target cluster count is infeasible.
         """
-        if y is None:
-            msg = "HACWard requires original labels"
-            raise ValueError(msg)
-        labels = hac_ward_by_label(np.asarray(X), np.asarray(y), target_k)
-        return self._set_cluster_result(X, y, labels)
+        y_array = np.asarray(y)
+        labels = hac_ward_by_label(np.asarray(X), y_array, target_k)
+        return self._set_cluster_result(X, y_array, labels)
 
 
 class HACWardNNC(_WardPredictor):
@@ -388,7 +386,7 @@ class HACWardNNC(_WardPredictor):
     def fit(
         self,
         X: ArrayLike,
-        y: ArrayLike | None,
+        y: ArrayLike,
         target_k: int,
     ) -> "HACWardNNC":
         """Fit nearest-neighbor-chain Ward hierarchical clustering.
@@ -397,7 +395,7 @@ class HACWardNNC(_WardPredictor):
         ----------
         X : ArrayLike
             Feature matrix.
-        y : ArrayLike | None
+        y : ArrayLike
             Original labels that constrain merges.
         target_k : int
             Requested number of clusters.
@@ -410,10 +408,8 @@ class HACWardNNC(_WardPredictor):
         Raises
         ------
         ValueError
-            If original labels are not provided or the target is infeasible.
+            If the target cluster count is infeasible.
         """
-        if y is None:
-            msg = "HACWardNNC requires original labels"
-            raise ValueError(msg)
-        labels = hac_ward_nnc_by_label(np.asarray(X), np.asarray(y), target_k)
-        return self._set_cluster_result(X, y, labels)
+        y_array = np.asarray(y)
+        labels = hac_ward_nnc_by_label(np.asarray(X), y_array, target_k)
+        return self._set_cluster_result(X, y_array, labels)

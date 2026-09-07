@@ -4,7 +4,7 @@ Using the algorithms
 Algorithm interface
 -------------------
 
-Every algorithm class implements ``BaseAlgo`` and follows the same fitted-model workflow:
+Every constrained algorithm class implements ``BaseAlgo`` and follows the same fitted-model workflow:
 
 .. code-block:: python
 
@@ -15,14 +15,13 @@ Every algorithm class implements ``BaseAlgo`` and follows the same fitted-model 
 The interface uses three inputs:
 
 * ``X`` is a numeric array with shape ``(n_samples, n_features)``.
-* ``y`` is either a one-dimensional array containing one source label per sample or ``None``.
+* ``y`` is a one-dimensional array containing one source label per sample.
 * ``target_k`` is the number of clusters to produce during fitting.
 
-Except for ``KMeans``, the implemented algorithms require ``y`` when fitting. They preserve the
-source-label boundaries: samples with different source labels cannot belong to the same cluster.
-Consequently, ``target_k`` must be at least the number of distinct source labels and cannot exceed
-the number of samples. Cluster IDs are integers and should be treated as identifiers rather than
-ordered values.
+Constrained algorithms preserve source-label boundaries: samples with different source labels
+cannot belong to the same cluster. Consequently, ``target_k`` must be at least the number of
+distinct source labels and cannot exceed the number of samples. Cluster IDs are integers and
+should be treated as identifiers rather than ordered values.
 
 Fitting and predicting
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -36,16 +35,15 @@ Fitting and predicting
     Performs the same fitting operation and returns the training assignments directly. The model
     remains fitted, so it can subsequently predict assignments for other samples.
 
-``predict(X, y=None)``
+``predict(X, y)``
     Assigns samples using the state retained during fitting. It does not fit the algorithm again
     and does not change ``labels_``. Each implementation applies its own assignment rule, described
     in `Implemented algorithms`_.
 
-When ``y`` is passed to ``predict``, each sample is considered only for fitted clusters associated
-with that source label. Omitting ``y`` allows each sample to be considered for every fitted
-cluster. This only changes assignment constraints; it does not create a new clustering.
+For constrained algorithms, each sample is considered only for fitted clusters associated with its
+supplied source label. This only changes assignment constraints; it does not create a new clustering.
 
-The following example fits BP-KMeans and then assigns both labelled and unlabelled samples:
+The following example fits BP-KMeans and then assigns labelled samples:
 
 .. code-block:: python
 
@@ -72,7 +70,6 @@ The following example fits BP-KMeans and then assigns both labelled and unlabell
 
     new_X = np.array([[0.5, 0.0], [14.5, 0.0]])
     labelled_clusters = model.predict(new_X, np.array(["left", "right"]))
-    unrestricted_clusters = model.predict(new_X)
 
 Calling ``predict`` before ``fit`` or ``fit_predict`` raises ``RuntimeError``. Labelled prediction
 also raises ``ValueError`` when a supplied label was not present during fitting.
@@ -99,8 +96,7 @@ source label, then repeatedly assigns an additional cluster to the selected labe
 
 ``n_init`` sets the number of k-means attempts made for each expansion. ``subsample_size`` is used
 by the subsampled k-means++ initializer. Prediction assigns a sample to the nearest fitted
-BP-KMeans centroid that is compatible with its source label, or to the nearest centroid overall
-when no label is supplied.
+BP-KMeans centroid that is compatible with its source label.
 
 .. code-block:: python
 
@@ -123,34 +119,32 @@ when no label is supplied.
 K-Means
 ~~~~~~~
 
-``KMeans`` implements unconstrained Lloyd k-means and serves as the standard baseline. Pass
-``y=None`` to ``fit`` or ``fit_predict``; labels supplied to this wrapper are ignored. ``n_init``
-controls the number of independent initializations and ``max_iter`` limits each Lloyd run.
-Prediction assigns every sample to its nearest fitted centroid.
+The ``kmeans`` function provides unconstrained Lloyd k-means as common functionality for the
+other algorithms. It returns the assigned labels and fitted centroids.
 
 .. code-block:: python
 
-    from bp_k_means.algos.k_means import KMeans
+    from bp_k_means.algos.k_means import kmeans
 
-    model = KMeans(seed=42, n_init=10, max_iter=300)
-    clusters = model.fit_predict(X, None, target_k=4)
+    clusters, centroids = kmeans(X, 4, seed=42)
 
-COP-KMeans
-~~~~~~~~~~
+COP-KMeans (label-constrained K-Means)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``COPKMeans`` performs centroid-based clustering while enforcing the source-label constraint
-during assignment. It tries ``n_init`` independent runs and retains the feasible result with the
-lowest within-cluster sum of squares. ``max_iter`` limits each run, while ``init_ensure_label``
+``COPKMeansCannotLink`` is the specialized label-constrained K-Means implementation. It performs
+centroid-based clustering while enforcing the source-label constraint during assignment. It tries
+``n_init`` independent runs and retains the feasible result with the lowest within-cluster sum of
+squares. ``max_iter`` limits each run, while ``init_ensure_label``
 controls whether initialization selects at least one centroid from every source label.
 
 Prediction assigns a sample to the nearest fitted centroid that is feasible for its supplied
-source label. Without a supplied label, prediction uses the nearest fitted centroid.
+source label.
 
 .. code-block:: python
 
-    from bp_k_means.algos.cop_k_means import COPKMeans
+    from bp_k_means.algos.cop_k_means import COPKMeansCannotLink
 
-    model = COPKMeans(seed=42, n_init=10, max_iter=300, init_ensure_label=True)
+    model = COPKMeansCannotLink(seed=42, n_init=10, max_iter=300, init_ensure_label=True)
     clusters = model.fit_predict(X, y, target_k=4)
 
 Bisecting K-Means
@@ -184,8 +178,7 @@ All four classes use ``seed`` and ``n_init``. ``BisectingKMeans`` additionally a
 The refined variants predict using their final refined centroids. Refinement can move samples
 across earlier split boundaries, so those boundaries no longer describe the final clustering. The
 non-refined variants retain the actual split hierarchy: prediction chooses the source-label root
-and follows the nearest child at each split until it reaches a fitted leaf. Without ``y``, it first
-selects the nearest source-label root.
+and follows the nearest child at each split until it reaches a fitted leaf.
 
 .. code-block:: python
 
@@ -224,8 +217,8 @@ ordinary nearest-centroid assignment.
 Choosing an implementation
 --------------------------
 
-Use ``BPKMeans`` for the algorithm proposed by this project. Use ``KMeans`` as an unconstrained
-baseline and ``COPKMeans`` as a constrained centroid-based baseline. The bisecting classes are
+Use ``BPKMeans`` for the algorithm proposed by this project. Use ``kmeans`` as an unconstrained
+baseline and ``COPKMeansCannotLink`` as a constrained centroid-based baseline. The bisecting classes are
 divisive alternatives, with the non-refined variants preserving a prediction hierarchy and the
 ``MRL`` variants ranking splits by exact WCSS reduction. Use ``HACWardNNC`` for the optimized Ward
 hierarchical baseline; ``HACWard`` provides the direct implementation for comparison.

@@ -1,4 +1,4 @@
-"""COP-KMeans implementation with cannot-link constraints between labels."""
+"""COP-KMeans: a specialized label-constrained K-means implementation."""
 
 from typing import TYPE_CHECKING
 
@@ -56,7 +56,7 @@ def _update_centroids(
     return new_centroids
 
 
-def cop_kmeans_by_label(
+def cop_kmeans_cannot_link(
     X: "NDArray",
     y: "NDArray",
     k: int,
@@ -87,18 +87,14 @@ def cop_kmeans_by_label(
 
     if init_ensure_label:
         # Initialize centroids: ensure at least one centroid per label
-        initial_indices = []
-        for label in labels:
-            indices_in_label = np.where(y == label)[0]
-            chosen = rng.choice(indices_in_label)
-            initial_indices.append(chosen)
+        initial_indices = [rng.choice(np.flatnonzero(y == label)) for label in labels]
 
         remaining_count = k - len(initial_indices)
         if remaining_count > 0:
-            all_indices = np.arange(n)
-            available_indices = np.setdiff1d(all_indices, initial_indices)
-            chosen_rest = rng.choice(available_indices, size=remaining_count, replace=False)
-            initial_indices.extend(chosen_rest)
+            available_indices = np.setdiff1d(np.arange(n), initial_indices)
+            initial_indices.extend(
+                rng.choice(available_indices, size=remaining_count, replace=False)
+            )
 
         centroids = X[initial_indices]
     else:
@@ -125,18 +121,16 @@ def cop_kmeans_by_label(
     return labels, centroids
 
 
-class COPKMeans(BaseAlgo):
-    """Common-interface wrapper around COP-KMeans."""
+class COPKMeansCannotLink(BaseAlgo):
+    """Specialized K-means with cannot-link constraints between source labels."""
 
     def predict(
         self,
         X: ArrayLike,
-        y: ArrayLike | None = None,
+        y: ArrayLike,
     ) -> "NDArray":
-        """Assign instances to the nearest feasible fitted COP-KMeans cluster."""
-        X_array, y_array = self._validate_prediction_input(X, y)
-        distances = self._squared_centroid_distances(X_array)
-        return self._select_lowest_cost_clusters(distances, y_array)
+        """Assign instances to the nearest feasible fitted cluster."""
+        return self._predict_nearest_centroid(X, y)
 
     def __init__(
         self,
@@ -166,36 +160,32 @@ class COPKMeans(BaseAlgo):
     def fit(
         self,
         X: ArrayLike,
-        y: ArrayLike | None,
+        y: ArrayLike,
         target_k: int,
-    ) -> "COPKMeans":
+    ) -> "COPKMeansCannotLink":
         """Fit COP-KMeans and store the best feasible result.
 
         Parameters
         ----------
         X : ArrayLike
             Feature matrix.
-        y : ArrayLike | None
+        y : ArrayLike
             Labels used by the cannot-link constraint.
         target_k : int
             Requested number of clusters.
 
         Returns
         -------
-        COPKMeans
+        COPKMeansCannotLink
             The fitted algorithm instance.
 
         Raises
         ------
         ValueError
-            If original labels are not provided.
+            If the requested cluster count is infeasible.
         RuntimeError
             If no initialization produces a feasible clustering.
         """
-        if y is None:
-            msg = "COPKMeans requires original labels"
-            raise ValueError(msg)
-
         X_array = np.asarray(X)
         y_array = np.asarray(y)
         rng = np.random.default_rng(self.seed) if isinstance(self.seed, int) else self.seed
@@ -205,7 +195,7 @@ class COPKMeans(BaseAlgo):
 
         for _ in range(self.n_init):
             current_seed = rng.integers(2**32)
-            labels, centroids = cop_kmeans_by_label(
+            labels, centroids = cop_kmeans_cannot_link(
                 X_array,
                 y_array,
                 target_k,
@@ -222,7 +212,7 @@ class COPKMeans(BaseAlgo):
                 best_centroids = centroids
 
         if best_labels is None or best_centroids is None:
-            msg = "COPKMeans did not produce a feasible clustering"
+            msg = "COPKMeansCannotLink did not produce a feasible clustering"
             raise RuntimeError(msg)
         source_labels = np.asarray(
             [y_array[best_labels == cluster][0] for cluster in np.unique(best_labels)]

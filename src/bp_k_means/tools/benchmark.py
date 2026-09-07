@@ -16,7 +16,7 @@ from bp_k_means.algos.bisecting_k_means_m_rl_optimized import (
 )
 from bp_k_means.algos.bisecting_k_means_optimized import BisectingKMeansNoRefine
 from bp_k_means.algos.bp_kmeans import BPKMeans, InitAlgorithm, InitStrategy, RankingMetric
-from bp_k_means.algos.cop_k_means import COPKMeans
+from bp_k_means.algos.cop_k_means import COPKMeansCannotLink
 from bp_k_means.algos.hac import HACWardNNC
 from bp_k_means.utils.logging import logger
 from bp_k_means.utils.metrics import overall_wcss
@@ -291,9 +291,6 @@ def _run_algorithms(
             postprocess(meta_path, labels, duration)
 
 
-# Algorithm factory
-
-
 def _build_algorithms(
     *,
     seed: int,
@@ -332,7 +329,7 @@ def _build_algorithms(
 
     for n_init in n_inits:
         if include_cop_kmeans:
-            algorithms.append(("COP-KMeans", COPKMeans(seed=seed, n_init=n_init)))
+            algorithms.append(("COP-KMeans", COPKMeansCannotLink(seed=seed, n_init=n_init)))
         if include_bisecting_kmeans:
             algorithms.append(
                 ("Bisecting KMeans", BisectingKMeansNoRefine(seed=seed, n_init=n_init))
