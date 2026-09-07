@@ -46,7 +46,13 @@ def test_ranking_metrics_follow_their_definitions(metric: RankingMetric, expecte
     centroids = np.array([[1.0], [11.0]])
 
     assert _compute_metric(
-        metric, 4.0, local_labels, X2, centroids, 2, 4,
+        metric,
+        4.0,
+        local_labels,
+        X2,
+        centroids,
+        2,
+        4,
     ) == pytest.approx(expected)
 
 
@@ -62,8 +68,13 @@ def test_estimated_reduction_metric_handles_the_last_possible_split() -> None:
 def test_exact_reduction_metric_is_rejected_by_the_simple_metric_helper() -> None:
     with pytest.raises(ValueError, match="Unsupported ranking metric"):
         _compute_metric(
-            RankingMetric.M_RL, 1.0, np.array([0]), np.array([0.0]),
-            np.array([[0.0]]), 1, 1,
+            RankingMetric.M_RL,
+            1.0,
+            np.array([0]),
+            np.array([0.0]),
+            np.array([[0.0]]),
+            1,
+            1,
         )
 
 
@@ -73,8 +84,14 @@ def test_acl_initialization_keeps_all_existing_centroids(algorithm: InitAlgorith
     existing = np.array([[0.5], [10.5]])
 
     result = _build_init_centroids(
-        InitStrategy.I_ACL, pts, existing, 2, 3, np.random.default_rng(2),
-        init_algorithm=algorithm, subsample_size=3,
+        InitStrategy.I_ACL,
+        pts,
+        existing,
+        2,
+        3,
+        np.random.default_rng(2),
+        init_algorithm=algorithm,
+        subsample_size=3,
     )
 
     np.testing.assert_allclose(result[:2], existing)
@@ -84,8 +101,14 @@ def test_acl_initialization_keeps_all_existing_centroids(algorithm: InitAlgorith
 def test_lri_with_exactly_new_k_points_returns_all_points() -> None:
     pts = np.array([[0.0], [1.0], [2.0]])
     result = _build_init_centroids(
-        InitStrategy.I_LRI, pts, np.array([[0.5]]), 1, 3, np.random.default_rng(0),
-        init_algorithm=InitAlgorithm.RANDOM_SAMPLING, subsample_size=2,
+        InitStrategy.I_LRI,
+        pts,
+        np.array([[0.5]]),
+        1,
+        3,
+        np.random.default_rng(0),
+        init_algorithm=InitAlgorithm.RANDOM_SAMPLING,
+        subsample_size=2,
     )
 
     np.testing.assert_array_equal(result, pts)
@@ -100,8 +123,16 @@ def test_cluster_initialization_strategies_keep_non_target_centroids(
     target_pts = pts[:2]
 
     result = _build_init_centroids(
-        strategy, pts, current, 2, 3, np.random.default_rng(0), target_pts, 0,
-        init_algorithm=InitAlgorithm.KMEANS_PLUS_PLUS, subsample_size=3,
+        strategy,
+        pts,
+        current,
+        2,
+        3,
+        np.random.default_rng(0),
+        target_pts,
+        0,
+        init_algorithm=InitAlgorithm.KMEANS_PLUS_PLUS,
+        subsample_size=3,
     )
 
     np.testing.assert_allclose(result[0], current[1])
@@ -111,8 +142,13 @@ def test_cluster_initialization_strategies_keep_non_target_centroids(
 def test_init_centroids_rejects_too_few_points() -> None:
     with pytest.raises(ValueError, match="Cannot initialize"):
         _build_init_centroids(
-            InitStrategy.I_LRI, np.array([[0.0], [1.0]]), np.array([[0.0]]), 1, 3,
-            np.random.default_rng(0), subsample_size=2,
+            InitStrategy.I_LRI,
+            np.array([[0.0], [1.0]]),
+            np.array([[0.0]]),
+            1,
+            3,
+            np.random.default_rng(0),
+            subsample_size=2,
         )
 
 
@@ -121,8 +157,16 @@ def test_run_split_finds_the_mathematical_two_pair_solution() -> None:
     X2 = np.einsum("ij,ij->i", pts, pts)
 
     wcss, labels, centroids = _run_split(
-        pts, X2, float(X2.sum()), np.zeros(4, dtype=int), np.array([[5.5]]),
-        1, 2, 1, np.random.default_rng(0), InitStrategy.I_CRI,
+        pts,
+        X2,
+        float(X2.sum()),
+        np.zeros(4, dtype=int),
+        np.array([[5.5]]),
+        1,
+        2,
+        1,
+        np.random.default_rng(0),
+        InitStrategy.I_CRI,
         subsample_size=4,
     )
 
@@ -142,8 +186,14 @@ def test_bp_kmeans_returns_target_count_and_label_pure_clusters(
 ) -> None:
     X, y = four_point_groups
     labels = bp_kmeans(
-        X, y, 5, seed=8, n_init=1, subsample_size=3,
-        ranking_metric=ranking_metric, init_strategy=init_strategy,
+        X,
+        y,
+        5,
+        seed=8,
+        n_init=1,
+        subsample_size=3,
+        ranking_metric=ranking_metric,
+        init_strategy=init_strategy,
         init_algorithm=init_algorithm,
     )
 

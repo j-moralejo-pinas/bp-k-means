@@ -35,12 +35,49 @@ def _algorithm_output_dir(
     n_init: int,
     run_name: str | None = None,
 ) -> Path:
-    """Return the output directory for one benchmark run."""
+    """
+    Return the output directory for one benchmark run.
+
+    Parameters
+    ----------
+    output_dir : Path
+        Benchmark output root.
+    dataset_name : str
+        Dataset identifier.
+    alg_name : str
+        Algorithm display name.
+    k : int
+        Target cluster count.
+    n_init : int
+        Number of initializations.
+    run_name : str | None
+        Explicit run directory name.
+
+    Returns
+    -------
+    Path
+        Deterministic output directory path.
+    """
     safe_alg = re.sub(r"[^\w]", "_", alg_name).strip("_")
     return output_dir / dataset_name / safe_alg / (run_name or f"k{k}_ninit{n_init}")
 
 
 def _compute_centroids(X: np.ndarray, labels: np.ndarray) -> pd.DataFrame:
+    """
+    Compute one coordinate centroid row per cluster.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Two-dimensional coordinates.
+    labels : np.ndarray
+        Cluster identifier for each row of ``X``.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns ``cluster_id``, ``x_utm``, and ``y_utm``.
+    """
     unique_labels = np.unique(labels)
     rows = []
     for c in unique_labels:
@@ -52,7 +89,21 @@ def _compute_centroids(X: np.ndarray, labels: np.ndarray) -> pd.DataFrame:
 
 
 def _compute_wcss_per_cluster_array(X: np.ndarray, labels: np.ndarray) -> np.ndarray:
-    """Return an array of WCSS values, one per unique cluster."""
+    """
+    Return an array of WCSS values, one per unique cluster.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Input coordinates or features.
+    labels : np.ndarray
+        Cluster identifier for each row.
+
+    Returns
+    -------
+    np.ndarray
+        WCSS values ordered by sorted unique cluster identifier.
+    """
     unique_clusters = np.unique(labels)
     wcss_values = np.empty(len(unique_clusters))
     for i, c in enumerate(unique_clusters):
@@ -69,6 +120,20 @@ def _compute_wcss_per_label_array(X: np.ndarray, y: np.ndarray, labels: np.ndarr
 
     Each entry is the sum of squared distances of all points belonging to that label from their
     respective (globally computed) cluster centroids.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Input coordinates or features.
+    y : np.ndarray
+        Original source labels.
+    labels : np.ndarray
+        Global cluster assignments.
+
+    Returns
+    -------
+    np.ndarray
+        WCSS values ordered by sorted unique source label.
     """
     unique_clusters = np.unique(labels)
     centroids = {int(c): X[labels == c].mean(axis=0) for c in unique_clusters}
@@ -89,7 +154,19 @@ def _compute_wcss_per_label_array(X: np.ndarray, y: np.ndarray, labels: np.ndarr
 
 
 def _wcss_stats(values: np.ndarray) -> dict:
-    """Compute descriptive statistics for an array of WCSS values."""
+    """
+    Compute descriptive statistics for an array of WCSS values.
+
+    Parameters
+    ----------
+    values : np.ndarray
+        WCSS observations.
+
+    Returns
+    -------
+    dict
+        Mean, standard deviation, quartiles, minimum, and maximum.
+    """
     return {
         "avg": float(np.mean(values)),
         "std": float(np.std(values)),
@@ -119,6 +196,42 @@ def _save_run_outputs(
     extra_metadata: dict | None = None,
     run_name: str | None = None,
 ) -> None:
+    """
+    Persist labels, centroids, distributions, and metadata for one run.
+
+    Parameters
+    ----------
+    dataset_name : str
+        Dataset identifier.
+    alg_name : str
+        Algorithm identifier.
+    k : int
+        Effective target cluster count.
+    k_mult : float
+        Requested cluster multiplier recorded in metadata.
+    n_init : int
+        Number of initializations.
+    X : np.ndarray
+        Input feature matrix.
+    y : np.ndarray
+        Source labels.
+    labels : np.ndarray
+        Fitted cluster labels.
+    duration : float
+        Elapsed fitting time in seconds.
+    wcss : float
+        Total within-cluster sum of squares.
+    output_dir : Path
+        Benchmark output root.
+    benchmark_type : str
+        Benchmark category recorded in metadata.
+    seed : int
+        Random seed recorded in metadata.
+    extra_metadata : dict | None
+        Additional metadata fields.
+    run_name : str | None
+        Explicit run directory suffix.
+    """
     run_dir = _algorithm_output_dir(output_dir, dataset_name, alg_name, k, n_init, run_name)
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -160,12 +273,42 @@ def _save_run_outputs(
 
 
 def _is_regular_benchmark_dataset(path: Path) -> bool:
+    """
+    Return whether a dataset path belongs to regular benchmarks.
+
+    Parameters
+    ----------
+    path : Path
+        Dataset path to classify.
+
+    Returns
+    -------
+    bool
+        ``True`` when the filename does not contain an excluded special-dataset
+        pattern.
+    """
     stem = path.stem.lower()
     return not any(pattern in stem for pattern in REGULAR_BENCHMARK_DATASET_EXCLUDE_PATTERNS)
 
 
 def _load_dataset(dataset_path: Path, label_column: str) -> tuple[np.ndarray, np.ndarray]:
-    """Load coordinates and labels from a benchmark parquet file."""
+    """
+    Load coordinates and labels from a benchmark parquet file.
+
+    Parameters
+    ----------
+    dataset_path : Path
+        Parquet dataset path.
+    label_column : str
+        Column containing source labels.
+
+    Returns
+    -------
+    X : np.ndarray
+        Coordinate matrix.
+    y : np.ndarray
+        Source-label array.
+    """
     df = pd.read_parquet(dataset_path)
     return df[["x_utm", "y_utm"]].to_numpy(), df[label_column].to_numpy()
 
@@ -177,7 +320,25 @@ def _iter_datasets(
     regular_only: bool = False,
     dataset_filename: str | None = None,
 ) -> Iterator[tuple[Path, np.ndarray, np.ndarray]]:
-    """Yield benchmark datasets, skipping files that cannot be loaded."""
+    """
+    Yield benchmark datasets, skipping files that cannot be loaded.
+
+    Parameters
+    ----------
+    datasets_dir : Path
+        Directory searched for parquet datasets.
+    label_column : str
+        Source-label column to load.
+    regular_only : bool
+        Whether special dataset names should be excluded.
+    dataset_filename : str | None
+        Explicit filename to load instead of globbing.
+
+    Yields
+    ------
+    (Path, np.ndarray, np.ndarray)
+        Dataset path, feature matrix, and source-label array.
+    """
     dataset_files = (
         [datasets_dir / dataset_filename]
         if dataset_filename is not None
@@ -210,7 +371,27 @@ def _run_algorithm(
     y: np.ndarray,
     target_k: int,
 ) -> tuple[np.ndarray | None, float]:
-    """Run one algorithm and return its labels and elapsed time."""
+    """
+    Run one algorithm and return its labels and elapsed time.
+
+    Parameters
+    ----------
+    algo : BaseAlgo
+        Algorithm instance to fit.
+    X : np.ndarray
+        Input feature matrix.
+    y : np.ndarray
+        Source labels.
+    target_k : int
+        Requested cluster count.
+
+    Returns
+    -------
+    labels : np.ndarray | None
+        Fitted labels, or ``None`` when fitting raises ``RuntimeError``.
+    duration : float
+        Elapsed wall-clock time in seconds.
+    """
     start_time = time.perf_counter()
     try:
         labels = algo.fit_predict(X, y, target_k)
@@ -220,7 +401,16 @@ def _run_algorithm(
 
 
 def _update_metadata(metadata_path: Path, updates: dict) -> None:
-    """Update a saved run's metadata in place."""
+    """
+    Update a saved run's metadata in place.
+
+    Parameters
+    ----------
+    metadata_path : Path
+        JSON metadata file to update.
+    updates : dict
+        Fields merged into the existing record.
+    """
     with metadata_path.open() as metadata_file:
         metadata = json.load(metadata_file)
     metadata.update(updates)
@@ -244,7 +434,38 @@ def _run_algorithms(
     extra_metadata: dict | None = None,
     postprocess: Callable[[Path, np.ndarray, float], None] | None = None,
 ) -> None:
-    """Run and persist all algorithms for one benchmark case."""
+    """
+    Run and persist all algorithms for one benchmark case.
+
+    Parameters
+    ----------
+    algorithms : list[tuple[str, BaseAlgo]]
+        Algorithm display names paired with instances.
+    dataset_name : str
+        Dataset identifier.
+    X : np.ndarray
+        Input features.
+    y : np.ndarray
+        Source labels.
+    target_k : int
+        Requested cluster count.
+    k_mult : float
+        Cluster multiplier recorded in metadata.
+    output_dir : Path
+        Output root.
+    seed : int
+        Random seed recorded in metadata.
+    skip_existing : bool
+        Whether existing metadata files are skipped.
+    benchmark_type : str
+        Benchmark category.
+    run_name_prefix : str | None
+        Prefix used for case-specific run directories.
+    extra_metadata : dict | None
+        Additional metadata fields.
+    postprocess : Callable[[Path, np.ndarray, float], None] | None
+        Callback invoked after each successful run.
+    """
     for alg_name, algo in algorithms:
         run_name = f"{run_name_prefix}_ninit{algo.n_init}" if run_name_prefix else None
         meta_path = (
@@ -291,7 +512,7 @@ def _run_algorithms(
             postprocess(meta_path, labels, duration)
 
 
-def _build_algorithms(
+def _build_algorithms(  # noqa: C901
     *,
     seed: int,
     n_inits: list[int] | tuple[int, ...],
@@ -305,7 +526,39 @@ def _build_algorithms(
     include_bisecting_kmeans_m_rl: bool,
     include_bp_kmeans: bool = True,
 ) -> list[tuple[str, BaseAlgo]]:
-    """Build the algorithms used by the benchmark suite."""
+    """
+    Build the algorithms used by the benchmark suite.
+
+    Parameters
+    ----------
+    seed : int
+        Base random seed.
+    n_inits : list[int] | tuple[int, ...]
+        Initialization counts.
+    subsample_size : int
+        Maximum subsample size for BP-KMeans initialization.
+    bp_ranking_metrics : list[RankingMetric] | tuple[RankingMetric, ...]
+        BP-KMeans ranking metrics.
+    bp_init_strategies : list[InitStrategy] | tuple[InitStrategy, ...]
+        BP-KMeans initialization strategies.
+    bp_init_algorithms : list[InitAlgorithm] | tuple[InitAlgorithm, ...]
+        BP-KMeans initialization algorithms.
+    include_cop_kmeans : bool
+        Whether to include COP-KMeans.
+    include_hac : bool
+        Whether to include HAC.
+    include_bisecting_kmeans : bool
+        Whether to include standard bisecting K-Means.
+    include_bisecting_kmeans_m_rl : bool
+        Whether to include M_RL bisecting K-Means.
+    include_bp_kmeans : bool
+        Whether to include BP-KMeans combinations.
+
+    Returns
+    -------
+    list[tuple[str, BaseAlgo]]
+        Algorithm display names paired with configured instances.
+    """
     algorithms: list[tuple[str, BaseAlgo]] = []
 
     if include_bp_kmeans:
@@ -314,8 +567,7 @@ def _build_algorithms(
                 for init_algorithm in bp_init_algorithms:
                     for n_init in n_inits:
                         name = (
-                            f"BP-KMeans ({ranking_metric.name}, {init.name}, "
-                            f"{init_algorithm.name})"
+                            f"BP-KMeans ({ranking_metric.name}, {init.name}, {init_algorithm.name})"
                         )
                         algorithm = BPKMeans(
                             seed=seed,
@@ -369,7 +621,55 @@ def run_benchmark(
     label_column: str = "CUSEC",
     log_label_name: str | None = None,
 ) -> None:
-    """Run a benchmark, with the benchmark type supplying its case-specific settings."""
+    """
+    Run a benchmark with case-specific settings selected by benchmark type.
+
+    Parameters
+    ----------
+    datasets_dir : Path
+        Input dataset directory.
+    output_dir : Path
+        Benchmark output root.
+    benchmark_type : Literal['regular', 'hac_strength', 'special']
+        Benchmark case to execute.
+    seed : int
+        Base random seed.
+    n_inits : list[int] | tuple[int, ...]
+        Initialization counts.
+    subsample_size : int
+        BP-KMeans subsample size.
+    bp_ranking_metrics : list[RankingMetric] | tuple[RankingMetric, ...]
+        BP-KMeans ranking metrics.
+    bp_init_strategies : list[InitStrategy] | tuple[InitStrategy, ...]
+        BP-KMeans initialization strategies.
+    bp_init_algorithms : list[InitAlgorithm] | tuple[InitAlgorithm, ...]
+        BP-KMeans initialization algorithms.
+    include_cop_kmeans : bool
+        Whether to include COP-KMeans.
+    include_hac : bool
+        Whether to include HAC.
+    skip_existing : bool
+        Whether completed runs are skipped.
+    include_bisecting_kmeans : bool
+        Whether to include standard bisecting K-Means.
+    include_bisecting_kmeans_m_rl : bool
+        Whether to include M_RL bisecting K-Means.
+    include_bp_kmeans : bool
+        Whether to include BP-KMeans.
+    k_values : list[float] | tuple[float, ...]
+        Requested multipliers or special target values.
+    dataset_filename : str | None
+        Explicit dataset filename.
+    label_column : str
+        Source-label column.
+    log_label_name : str | None
+        Human-readable label name for logging.
+
+    Raises
+    ------
+    ValueError
+        If ``k_values`` is empty or contains a non-positive value.
+    """
     if not k_values or any(value <= 0 for value in k_values):
         msg = "k must be a non-empty list of positive values"
         raise ValueError(msg)
@@ -475,7 +775,23 @@ def run_benchmark(
 
 
 def _compute_distance_metrics(X: np.ndarray, labels: np.ndarray, y: np.ndarray) -> dict:
-    """Compute distances to the node closest to each cluster centroid."""
+    """
+    Compute distances to the node closest to each cluster centroid.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Input coordinates.
+    labels : np.ndarray
+        Cluster assignment for each point.
+    y : np.ndarray
+        Original source labels.
+
+    Returns
+    -------
+    dict
+        Aggregate representative-node distance metrics and compatibility aliases.
+    """
     all_dists = np.empty(len(X))
     max_per_label: dict = {}
     representative_indices: list[int] = []
@@ -516,9 +832,35 @@ def _compute_distance_metrics(X: np.ndarray, labels: np.ndarray, y: np.ndarray) 
 def _distance_postprocessor(
     X: np.ndarray, y: np.ndarray
 ) -> Callable[[Path, np.ndarray, float], None]:
-    """Build the postprocessor used by special distance benchmarks."""
+    """
+    Build the postprocessor used by special distance benchmarks.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Input coordinates retained by the callback.
+    y : np.ndarray
+        Source labels retained by the callback.
+
+    Returns
+    -------
+    Callable[[Path, np.ndarray, float], None]
+        Callback accepting metadata path, fitted labels, and elapsed duration.
+    """
 
     def process(meta_path: Path, labels: np.ndarray, duration: float) -> None:
+        """
+        Add distance metrics to one run's metadata.
+
+        Parameters
+        ----------
+        meta_path : Path
+            Metadata JSON file to update.
+        labels : np.ndarray
+            Fitted cluster labels.
+        duration : float
+            Elapsed fitting time used for logging.
+        """
         dist_metrics = _compute_distance_metrics(X, labels, y)
         _update_metadata(meta_path, dist_metrics)
         logger.info(

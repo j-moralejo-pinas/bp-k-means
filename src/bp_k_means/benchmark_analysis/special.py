@@ -58,7 +58,23 @@ def _load_special_metric_metadata(
     metric_keys: list[str],
     output_dir: Path,
 ) -> pd.DataFrame:
-    """Scan output/ for special metric metadata rows containing all requested keys."""
+    """
+    Scan output for metric metadata rows containing all requested keys.
+
+    Parameters
+    ----------
+    dataset_prefix : str
+        Prefix required in the metadata dataset name.
+    metric_keys : list[str]
+        Metadata fields that must be present.
+    output_dir : Path
+        Root directory containing benchmark metadata files.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per matching run, with requested metrics converted to floats.
+    """
     rows = []
     for meta in read_metadata_files(output_dir):
         if meta.get("benchmark_type") == HAC_STRENGTH_BENCHMARK_TYPE:
@@ -87,6 +103,22 @@ def _load_special_metric_metadata(
 def _resolve_special_n_inits(
     df: pd.DataFrame, manual_bp_algorithms: dict[int, str] | None
 ) -> list[int]:
+    """
+    Resolve requested initialization counts against available data.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Special-metric rows containing an ``n_init`` column.
+    manual_bp_algorithms : dict[int, str] | None
+        Optional explicit initialization counts to retain.
+
+    Returns
+    -------
+    list[int]
+        Available requested counts in sorted order. By default, the smallest
+        and largest available counts are selected.
+    """
     available = sorted(int(v) for v in df["n_init"].dropna().unique())
     if not available:
         return []
@@ -99,7 +131,21 @@ def _resolve_special_n_inits(
 
 
 def _time_comparison_number(value: float, _pos: int | None = None) -> str:
-    """Format comparison time values with precision based on their magnitude."""
+    """
+    Format comparison time values with precision based on magnitude.
+
+    Parameters
+    ----------
+    value : float
+        Time value to format.
+    _pos : int | None
+        Matplotlib formatter position, ignored.
+
+    Returns
+    -------
+    str
+        Formatted time or an empty string for non-finite values.
+    """
     if not np.isfinite(value):
         return ""
     abs_value = abs(value)
@@ -111,7 +157,21 @@ def _time_comparison_number(value: float, _pos: int | None = None) -> str:
 
 
 def _metric_comparison_number(value: float, _pos: int | None = None) -> str:
-    """Format comparison metric values with precision based on their magnitude."""
+    """
+    Format comparison metric values with precision based on magnitude.
+
+    Parameters
+    ----------
+    value : float
+        Metric value to format.
+    _pos : int | None
+        Matplotlib formatter position, ignored.
+
+    Returns
+    -------
+    str
+        Formatted metric or an empty string for non-finite values.
+    """
     if not np.isfinite(value):
         return ""
     abs_value = abs(value)
@@ -123,6 +183,19 @@ def _metric_comparison_number(value: float, _pos: int | None = None) -> str:
 
 
 def _special_metric_axis_step(separation: float) -> int:
+    """
+    Choose a readable tick step for a metric range.
+
+    Parameters
+    ----------
+    separation : float
+        Difference between the maximum and minimum metric values.
+
+    Returns
+    -------
+    int
+        Tick spacing suitable for the range.
+    """
     if separation < AXIS_SHORT_LIMIT:
         return 25
     if separation < AXIS_MEDIUM_LIMIT:
@@ -131,6 +204,19 @@ def _special_metric_axis_step(separation: float) -> int:
 
 
 def _metric_axis_bounds(values: pd.Series) -> tuple[float, float] | None:
+    """
+    Compute rounded axis bounds surrounding finite metric values.
+
+    Parameters
+    ----------
+    values : pd.Series
+        Metric values to bound.
+
+    Returns
+    -------
+    tuple[float, float] | None
+        Lower and upper bounds, or ``None`` when no finite values exist.
+    """
     finite_values: Any = values[np.isfinite(values)]
     if finite_values.empty:
         return None
@@ -150,7 +236,24 @@ def _metric_axis_bounds(values: pd.Series) -> tuple[float, float] | None:
 
 
 def bp_algorithm_from_spec(spec: str) -> str:
-    """Expand a compact BP-KMeans component specification."""
+    """
+    Expand a compact BP-KMeans component specification.
+
+    Parameters
+    ----------
+    spec : str
+        Full algorithm name or comma-/slash-separated component names.
+
+    Returns
+    -------
+    str
+        Canonical ``BP-KMeans (...)`` algorithm name.
+
+    Raises
+    ------
+    argparse.ArgumentTypeError
+        If the specification does not contain exactly three components.
+    """
     spec = spec.strip()
     if spec.startswith("BP-KMeans"):
         return spec
@@ -169,6 +272,21 @@ def _best_bp_comparison_row(
     bp_rows: pd.DataFrame,
     key: str,
 ) -> pd.Series:
+    """
+    Return the mean best BP-KMeans row for one metric.
+
+    Parameters
+    ----------
+    bp_rows : pd.DataFrame
+        BP-KMeans rows containing the metric, runtime, and algorithm columns.
+    key : str
+        Metric column to minimize.
+
+    Returns
+    -------
+    pd.Series
+        Aggregated row for the algorithm with the lowest mean metric.
+    """
     bp_agg = (
         bp_rows.groupby("algorithm")
         .agg(**{f"mean_{key}": (key, "mean"), "mean_time": ("time", "mean")})
@@ -184,6 +302,26 @@ def _manual_bp_comparison_row(
     key: str,
     manual_bp_algorithms: dict[int, str] | None,
 ) -> pd.Series | None:
+    """
+    Return a manually selected BP-KMeans comparison row.
+
+    Parameters
+    ----------
+    bp_rows : pd.DataFrame
+        BP-KMeans rows for one initialization count.
+    n_init : int
+        Initialization count to select.
+    key : str
+        Metric column to average.
+    manual_bp_algorithms : dict[int, str] | None
+        Mapping from initialization count to algorithm name.
+
+    Returns
+    -------
+    pd.Series | None
+        Aggregated selected row, or ``None`` when no mapping or matching row
+        exists.
+    """
     manual_algorithm = (manual_bp_algorithms or {}).get(n_init)
     if manual_algorithm is None:
         return None
@@ -209,6 +347,27 @@ def _comparison_record(
     values: pd.Series,
     key: str,
 ) -> dict[str, Any]:
+    """
+    Build one normalized comparison record.
+
+    Parameters
+    ----------
+    n_init : int
+        Initialization count.
+    kind : str
+        Comparison category.
+    algorithm : str
+        Algorithm name.
+    values : pd.Series
+        Aggregate values containing metric and time fields.
+    key : str
+        Metric field name.
+
+    Returns
+    -------
+    dict[str, Any]
+        Serializable comparison record.
+    """
     return {
         "n_init": n_init,
         "kind": kind,
@@ -227,7 +386,25 @@ def _plot_special_metric_time_comparison(
     *,
     manual_bp_algorithms: dict[int, str] | None = None,
 ) -> None:
-    """Compare Bisecting KMeans with per-problem and globally tuned BP-KMeans rows."""
+    """
+    Compare Bisecting KMeans with tuned BP-KMeans rows.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Special-metric rows containing algorithm, initialization, metric, and
+        runtime columns.
+    key : str
+        Metric column to compare.
+    metric_label : str
+        Display label for the metric axis.
+    save_dir : Path
+        Output directory for CSV and figure files.
+    title_prefix : str
+        Prefix used in the figure title.
+    manual_bp_algorithms : dict[int, str] | None
+        Optional globally tuned algorithm per initialization count.
+    """
     df = cast("Any", df)
     selected_n_inits = _resolve_special_n_inits(df, manual_bp_algorithms)
     if not selected_n_inits:
@@ -380,7 +557,32 @@ def _plot_metric_tradeoff(
     *,
     pareto: bool,
 ) -> None:
-    """Plot one special metric against runtime."""
+    """
+    Plot one special metric against runtime.
+
+    Parameters
+    ----------
+    aggregate : pd.DataFrame
+        Aggregated rows containing mean runtime and metric columns.
+    metric_col : str
+        Aggregated metric column plotted on the y-axis.
+    metric_label : str
+        Display label for the metric axis.
+    title_prefix : str
+        Prefix used in the figure title.
+    save_path : Path
+        Destination image path.
+    color_map : dict[str, tuple] | None
+        Optional display-label color mapping.
+    marker_map : dict[str, str] | None
+        Optional display-label marker mapping.
+    fill_map : dict[str, bool] | None
+        Optional display-label fill mapping.
+    legend_info : dict | None
+        Optional scatter legend sections.
+    pareto : bool
+        Whether to highlight the Pareto front.
+    """
     fig, ax = plt.subplots(figsize=(10, 7))
     title_suffix = " Pareto front" if pareto else " vs time"
     draw_scatter_plot(
@@ -424,6 +626,31 @@ def analyze_special_metric(
     No relative normalization, no breakdown by k_multiplier or size bin. *metric_keys* is a list of
     (key, label) pairs, each producing its own bar chart, scatter and Pareto plot. The primary
     metric (first entry) is also used as the Y axis of the shared scatter/Pareto.
+
+    Parameters
+    ----------
+    dataset_prefix : str
+        Prefix identifying the dataset family to analyze.
+    metric_keys : list[tuple[str, str]]
+        Metric metadata keys paired with display labels.
+    save_dir : Path
+        Directory receiving CSV and figure outputs.
+    title_prefix : str
+        Prefix used in generated titles.
+    kpp_only : bool
+        Whether to keep only Bisecting KMeans and k-means++ BP-KMeans rows.
+    color_map : dict[str, tuple] | None
+        Optional display-label color mapping.
+    marker_map : dict[str, str] | None
+        Optional display-label marker mapping.
+    fill_map : dict[str, bool] | None
+        Optional display-label fill mapping.
+    legend_info : dict | None
+        Optional scatter legend sections.
+    comparison_bp_algorithms : dict[int, str] | None
+        Optional manually selected BP-KMeans algorithm per initialization count.
+    output_dir : Path
+        Root directory containing benchmark metadata.
     """
     keys = [k for k, _ in metric_keys]
     df = cast("Any", _load_special_metric_metadata(dataset_prefix, keys, output_dir))

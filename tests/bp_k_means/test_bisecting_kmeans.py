@@ -28,7 +28,10 @@ from bp_k_means.algos.bisecting_k_means_optimized import (
 
 def test_validate_inputs_normalizes_arrays_and_checks_feasibility() -> None:
     X, y, n_samples, n_labels = _validate_inputs(
-        [[0.0], [1.0], [10.0]], ["a", "a", "b"], 2, 1,
+        [[0.0], [1.0], [10.0]],
+        ["a", "a", "b"],
+        2,
+        1,
     )
 
     assert X.shape == (3, 1)
@@ -43,7 +46,10 @@ def test_validate_inputs_normalizes_arrays_and_checks_feasibility() -> None:
 def test_validate_inputs_rejects_invalid_settings(target_k: int, n_init: int, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         _validate_inputs(
-            np.array([[0.0], [1.0], [10.0]]), np.array(["a", "a", "b"]), target_k, n_init,
+            np.array([[0.0], [1.0], [10.0]]),
+            np.array(["a", "a", "b"]),
+            target_k,
+            n_init,
         )
 
 
@@ -52,7 +58,10 @@ def test_best_bisecting_split_returns_two_clusters_and_exact_wcss() -> None:
     X2 = np.einsum("ij,ij->i", X, X)
 
     labels, centroids, per_cluster, counts = _best_bisecting_split(
-        X, X2, 1, np.random.default_rng(0),
+        X,
+        X2,
+        1,
+        np.random.default_rng(0),
     )
 
     assert sorted(counts.tolist()) == [2, 2]
@@ -65,7 +74,13 @@ def test_refine_cluster_split_returns_consistent_counts_and_exact_wcss() -> None
     X2 = np.einsum("ij,ij->i", pts, pts)
 
     wcss, labels, centroids, counts = _refine_cluster_split(
-        pts, pts, X2, float(X2.sum()), np.array([[5.5]]), 0, 1,
+        pts,
+        pts,
+        X2,
+        float(X2.sum()),
+        np.array([[5.5]]),
+        0,
+        1,
         np.random.default_rng(0),
     )
 
@@ -77,7 +92,13 @@ def test_refine_cluster_split_returns_consistent_counts_and_exact_wcss() -> None
 def test_push_cluster_candidates_uses_requested_priority_formula() -> None:
     heap: list[tuple[float, int, int, int]] = []
     _push_cluster_candidates(
-        heap, 4, np.array([3, 2, 1]), np.array([9.0, 4.0, 2.0]), 3, 10, 7,
+        heap,
+        4,
+        np.array([3, 2, 1]),
+        np.array([9.0, 4.0, 2.0]),
+        3,
+        10,
+        7,
         use_wcss_per_cluster=True,
     )
 
@@ -104,7 +125,8 @@ def test_cluster_node_stores_split_candidate_state() -> None:
     ],
 )
 def test_all_bisecting_variants_reach_target_and_preserve_labels(
-    four_point_groups: tuple[np.ndarray, np.ndarray], algorithm,
+    four_point_groups: tuple[np.ndarray, np.ndarray],
+    algorithm,
 ) -> None:
     X, y = four_point_groups
 
@@ -113,7 +135,8 @@ def test_all_bisecting_variants_reach_target_and_preserve_labels(
     assert len(np.unique(labels)) == 5
     assert_label_pure(labels, y)
     assert direct_wcss(labels=labels, X=X) <= direct_wcss(
-        X, np.array([0] * 4 + [1] * 4),
+        X,
+        np.array([0] * 4 + [1] * 4),
     )
 
 
@@ -127,12 +150,14 @@ def test_all_bisecting_variants_reach_target_and_preserve_labels(
     ],
 )
 def test_all_bisecting_variants_return_identity_at_maximum_target(
-    three_two_point_groups: tuple[np.ndarray, np.ndarray], algorithm,
+    three_two_point_groups: tuple[np.ndarray, np.ndarray],
+    algorithm,
 ) -> None:
     X, y = three_two_point_groups
 
     np.testing.assert_array_equal(
-        algorithm(X, y, len(X), seed=0, n_init=1), np.arange(len(X)),
+        algorithm(X, y, len(X), seed=0, n_init=1),
+        np.arange(len(X)),
     )
 
 

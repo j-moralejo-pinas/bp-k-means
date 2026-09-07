@@ -53,7 +53,28 @@ def analyze_grouping(
     fill_map: dict[str, bool] | None = None,
     legend_info: dict | None = None,
 ) -> None:
-    """Write tables and plots for a grouping, normalized within its algorithm subset."""
+    """
+    Write tables and plots for a grouping normalized within its subset.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Benchmark rows with dataset context.
+    group_cols : list[str]
+        Columns defining algorithm aggregation groups.
+    label_fn : Callable[[pd.Series], str]
+        Function converting an aggregated row to a display label.
+    save_dir : Path
+        Directory receiving tables and figures.
+    color_map : dict[str, tuple] | None
+        Optional global display-label color mapping.
+    marker_map : dict[str, str] | None
+        Optional global display-label marker mapping.
+    fill_map : dict[str, bool] | None
+        Optional global display-label fill mapping.
+    legend_info : dict | None
+        Optional scatter legend sections.
+    """
     df = cast("Any", df)
     save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -145,7 +166,20 @@ def analyze_hac_strength_benchmark(
     results_dir: Path,
     show_titles: bool = False,
 ) -> None:
-    """Analyze HAC-strength rows for BP-KMeans++ and standard Bisecting KMeans."""
+    """
+    Analyze HAC-strength rows for BP-KMeans++ and standard Bisecting KMeans.
+
+    Parameters
+    ----------
+    output_dir : Path
+        Root directory containing benchmark metadata.
+    data_dir : Path
+        Directory containing source datasets.
+    results_dir : Path
+        Directory receiving HAC-strength analysis outputs.
+    show_titles : bool
+        Whether generated figures include titles.
+    """
     set_show_titles(show_titles=show_titles)
 
     df = cast("Any", select_bp_vs_bisecting_kmeans(load_hac_strength_metadata(output_dir)))
@@ -206,7 +240,24 @@ def analyze_hac_strength_benchmark(
 
 
 def parse_bp_combination_map(value: str) -> dict[int, str]:
-    """Parse n_init-to-BP-KMeans-combination mapping for CLI use."""
+    """
+    Parse an initialization-to-BP-KMeans mapping for CLI use.
+
+    Parameters
+    ----------
+    value : str
+        Semicolon-separated ``n_init=specification`` entries.
+
+    Returns
+    -------
+    dict[int, str]
+        Initialization count to canonical algorithm name.
+
+    Raises
+    ------
+    argparse.ArgumentTypeError
+        If an entry is malformed or does not use k-means++ initialization.
+    """
     mapping: dict[int, str] = {}
     for raw_entry in value.split(";"):
         entry = raw_entry.strip()
@@ -237,7 +288,14 @@ def parse_bp_combination_map(value: str) -> dict[int, str]:
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command-line options for benchmark analysis."""
+    """
+    Parse command-line options for benchmark analysis.
+
+    Returns
+    -------
+    argparse.Namespace
+        Parsed command-line options.
+    """
     parser = argparse.ArgumentParser(description="Analyze benchmark results.")
     parser.add_argument(
         "--config",
@@ -277,7 +335,18 @@ def main(
     *,
     show_titles: bool = False,
 ) -> None:
-    """Run the complete benchmark aggregation and plotting pipeline."""
+    """
+    Run the complete benchmark aggregation and plotting pipeline.
+
+    Parameters
+    ----------
+    config : ExperimentConfig
+        Benchmark configuration whose paths select inputs and outputs.
+    special_bp_combinations : dict[int, str] | None
+        Optional manually selected BP-KMeans algorithms for special metrics.
+    show_titles : bool
+        Whether generated figures include titles.
+    """
     set_show_titles(show_titles=show_titles)
 
     output_dir = config.benchmark_output_dir
@@ -376,7 +445,14 @@ def main(
 
 
 def cli() -> None:
-    """Run the benchmark analysis command-line interface."""
+    """
+    Run the benchmark analysis command-line interface.
+
+    Raises
+    ------
+    SystemExit
+        If configuration loading or analysis fails.
+    """
     args = parse_args()
     try:
         config = load_config(args.config)

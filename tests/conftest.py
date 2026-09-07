@@ -16,8 +16,16 @@ def two_label_points() -> tuple[np.ndarray, np.ndarray]:
 def four_point_groups() -> tuple[np.ndarray, np.ndarray]:
     """Two labels with enough points to exercise several split steps."""
     X = np.array(
-        [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0],
-         [10.0, 0.0], [11.0, 0.0], [12.0, 0.0], [13.0, 0.0]]
+        [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [2.0, 0.0],
+            [3.0, 0.0],
+            [10.0, 0.0],
+            [11.0, 0.0],
+            [12.0, 0.0],
+            [13.0, 0.0],
+        ]
     )
     y = np.array(["left"] * 4 + ["right"] * 4)
     return X, y
@@ -52,8 +60,5 @@ def assert_label_pure(labels: np.ndarray, y: np.ndarray) -> None:
 def direct_wcss(X: np.ndarray, labels: np.ndarray) -> float:
     """Calculate WCSS directly from each cluster's arithmetic mean."""
     return float(
-        sum(
-            np.sum((X[labels == c] - X[labels == c].mean(axis=0)) ** 2)
-            for c in np.unique(labels)
-        )
+        sum(np.sum((X[labels == c] - X[labels == c].mean(axis=0)) ** 2) for c in np.unique(labels))
     )

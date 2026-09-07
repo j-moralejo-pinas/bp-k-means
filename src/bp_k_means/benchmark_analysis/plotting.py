@@ -24,18 +24,47 @@ PLOT_OPTIONS = {"show_titles": False}
 
 
 def set_show_titles(*, show_titles: bool) -> None:
-    """Set title visibility for figures created during this analysis run."""
+    """
+    Set title visibility for figures created during this analysis run.
+
+    Parameters
+    ----------
+    show_titles : bool
+        Whether plotting helpers should render titles by default.
+    """
     PLOT_OPTIONS["show_titles"] = show_titles
 
 
 def set_title(ax: Any, title: str | None, *, force: bool = False) -> None:
-    """Set an axis title when titles are enabled or explicitly forced."""
+    """
+    Set an axis title when titles are enabled or explicitly forced.
+
+    Parameters
+    ----------
+    ax : Any
+        Axis receiving the title.
+    title : str | None
+        Title text, or ``None`` to leave the axis unchanged.
+    force : bool
+        Whether to set the title regardless of global title visibility.
+    """
     if (PLOT_OPTIONS["show_titles"] or force) and title:
         ax.set_title(title)
 
 
 def set_suptitle(fig: Any, title: str | None, **kwargs: Any) -> None:
-    """Set a figure title when titles are enabled."""
+    """
+    Set a figure title when titles are enabled.
+
+    Parameters
+    ----------
+    fig : Any
+        Figure receiving the title.
+    title : str | None
+        Figure title, or ``None`` to leave it unchanged.
+    **kwargs : Any
+        Additional keyword arguments forwarded to ``Figure.suptitle``.
+    """
     if PLOT_OPTIONS["show_titles"] and title:
         fig.suptitle(title, **kwargs)
 
@@ -53,7 +82,19 @@ MATH_LABELS = {
 
 
 def to_math_label(text: str) -> str:
-    """Replace internal algorithm codes with display-friendly math labels."""
+    """
+    Replace internal algorithm codes with display-friendly math labels.
+
+    Parameters
+    ----------
+    text : str
+        Algorithm label containing optional internal component codes.
+
+    Returns
+    -------
+    str
+        Label with recognized codes replaced by Matplotlib math text.
+    """
     rendered = text
     for plain, math in MATH_LABELS.items():
         rendered = rendered.replace(plain, math)
@@ -69,7 +110,21 @@ MARKERS = ["o", "s", "^", "D", "v", "P", "X", "h", "*", "<"]
 
 
 def _plain_number(value: float, _pos: int | None = None) -> str:
-    """Render numeric ticks/labels without scientific notation."""
+    """
+    Render numeric ticks/labels without scientific notation.
+
+    Parameters
+    ----------
+    value : float
+        Tick value to format.
+    _pos : int | None
+        Matplotlib formatter position, ignored.
+
+    Returns
+    -------
+    str
+        Human-readable numeric representation.
+    """
     if not np.isfinite(value):
         return ""
     if abs(value) < ZERO_TOLERANCE:
@@ -82,7 +137,14 @@ def _plain_number(value: float, _pos: int | None = None) -> str:
 
 
 def apply_plain_tick_format(axis: Any) -> None:
-    """Force plain (non-scientific) tick labels on a matplotlib Axis."""
+    """
+    Force plain (non-scientific) tick labels on a Matplotlib axis.
+
+    Parameters
+    ----------
+    axis : Any
+        Axis whose major and minor formatters are configured.
+    """
     if axis.get_scale() == "log":
         lo, hi = axis.get_view_interval()
         if hi < lo:
@@ -112,10 +174,25 @@ def build_color_map(
     Return a label-string → RGB color dict.
 
     Color scheme:
+
     - Non-BP-KMeans algorithms each get a distinct hue from tab10.
     - BP-KMeans metrics each get a distinct
       hue continuing from where non-BP hues left off.
     - Higher n_init → darker shade (lower lightness).
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Benchmark rows containing ``algorithm`` and ``n_init`` columns.
+    min_lightness : float
+        Minimum lightness used for the darkest initialization-count shade.
+    max_lightness : float
+        Maximum lightness used for the lightest initialization-count shade.
+
+    Returns
+    -------
+    dict[str, tuple]
+        Mapping from display label to RGB color tuple.
     """
     base_cmap = plt.get_cmap("tab10")
     unique_algs = sorted(df["algorithm"].unique())
@@ -136,6 +213,19 @@ def build_color_map(
     }
 
     def hue_key(alg: str) -> str:
+        """
+        Return the color-group key for one algorithm name.
+
+        Parameters
+        ----------
+        alg : str
+            Algorithm name.
+
+        Returns
+        -------
+        str
+            Ranking metric for BP-KMeans or the algorithm name otherwise.
+        """
         if alg.startswith("BP-KMeans"):
             m = _BP_RE.search(alg)
             return m.group(1) if m else alg
@@ -165,6 +255,16 @@ def build_marker_map(df: pd.DataFrame) -> dict[str, str]:
 
     Non-BP-KMeans algorithms get 'o'.  Each unique init_strategy in BP-KMeans gets a distinct marker
     from MARKERS.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Benchmark rows containing ``algorithm`` and ``n_init`` columns.
+
+    Returns
+    -------
+    dict[str, str]
+        Mapping from display label to Matplotlib marker.
     """
     unique_algs = sorted(df["algorithm"].unique())
     unique_n_inits = sorted(df["n_init"].unique())
@@ -182,7 +282,19 @@ def build_marker_map(df: pd.DataFrame) -> dict[str, str]:
 
 
 def build_fill_map(df: pd.DataFrame) -> dict[str, bool]:
-    """Build a fill map for KMEANS_PLUS_PLUS and other initialization algorithms."""
+    """
+    Build a fill map for KMEANS_PLUS_PLUS and other initialization algorithms.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Benchmark rows containing ``algorithm`` and ``n_init`` columns.
+
+    Returns
+    -------
+    dict[str, bool]
+        Mapping from display label to whether the marker should be filled.
+    """
     unique_algs = sorted(df["algorithm"].unique())
     unique_n_inits = sorted(df["n_init"].unique())
     fill_map: dict[str, bool] = {}
@@ -197,7 +309,23 @@ def build_fill_map(df: pd.DataFrame) -> dict[str, bool]:
 def _build_color_legend_entries(
     unique_algs: list[str], rep_n_init: int, color_map: dict[str, tuple]
 ) -> tuple[list[tuple[str, tuple]], list[tuple[str, tuple]]]:
-    """Build baseline and ranking color legend entries."""
+    """
+    Build baseline and ranking color legend entries.
+
+    Parameters
+    ----------
+    unique_algs : list[str]
+        Unique algorithm names.
+    rep_n_init : int
+        Initialization count represented by each color.
+    color_map : dict[str, tuple]
+        Display-label to RGB color mapping.
+
+    Returns
+    -------
+    tuple[list[tuple[str, tuple]], list[tuple[str, tuple]]]
+        Baseline entries and ranking-metric entries.
+    """
     baselines: dict[str, tuple] = {}
     rankings: dict[str, tuple] = {}
     for alg in unique_algs:
@@ -217,7 +345,27 @@ def _build_component_legend_entries(
     value_map: dict[str, Any],
     default: Any,
 ) -> list[tuple[str, Any]]:
-    """Map one parsed BP-KMeans component to its visual encoding."""
+    """
+    Map one parsed BP-KMeans component to its visual encoding.
+
+    Parameters
+    ----------
+    unique_algs : list[str]
+        Unique algorithm names.
+    rep_n_init : int
+        Initialization count represented by each encoding.
+    component : int
+        Regular-expression group containing the component.
+    value_map : dict[str, Any]
+        Display-label to visual-value mapping.
+    default : Any
+        Fallback visual value.
+
+    Returns
+    -------
+    list[tuple[str, Any]]
+        Component names paired with visual values.
+    """
     entries = {}
     for alg in unique_algs:
         bp_match = _BP_RE.search(alg)
@@ -230,7 +378,23 @@ def _build_component_legend_entries(
 def _build_lightness_legend_entries(
     unique_n_inits: list[int], min_lightness: float, max_lightness: float
 ) -> list[tuple[int, tuple]]:
-    """Build the gray swatches used to explain n_init lightness."""
+    """
+    Build the gray swatches used to explain ``n_init`` lightness.
+
+    Parameters
+    ----------
+    unique_n_inits : list[int]
+        Initialization counts to represent.
+    min_lightness : float
+        Minimum lightness used for the darkest swatch.
+    max_lightness : float
+        Maximum lightness used for the lightest swatch.
+
+    Returns
+    -------
+    list[tuple[int, tuple]]
+        Initialization count and RGB swatch pairs.
+    """
     n_levels = len(unique_n_inits)
     entries = []
     for init_idx, n_init in enumerate(unique_n_inits):
@@ -251,7 +415,29 @@ def build_legend_info(
     min_lightness: float = 0.25,
     max_lightness: float = 0.80,
 ) -> dict:
-    """Build legend entries for colors, shapes, fills, and initialization count."""
+    """
+    Build legend entries for colors, shapes, fills, and initialization count.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Benchmark rows containing algorithm and initialization columns.
+    color_map : dict[str, tuple]
+        Display-label to RGB color mapping.
+    marker_map : dict[str, str]
+        Display-label to marker mapping.
+    fill_map : dict[str, bool]
+        Display-label to marker-fill mapping.
+    min_lightness : float
+        Minimum lightness represented in the initialization legend.
+    max_lightness : float
+        Maximum lightness represented in the initialization legend.
+
+    Returns
+    -------
+    dict
+        Legend sections consumed by :func:`add_scatter_legends`.
+    """
     unique_algs = sorted(df["algorithm"].unique())
     unique_n_inits = sorted(df["n_init"].unique())
     rep_n_init = unique_n_inits[len(unique_n_inits) // 2]
@@ -282,7 +468,24 @@ def _append_legend_section(
     *,
     show_single_entry: bool = False,
 ) -> None:
-    """Append one typed section to a scatter legend."""
+    """
+    Append one typed section to a scatter legend.
+
+    Parameters
+    ----------
+    handles : list[Any]
+        Mutable legend-handle list.
+    labels : list[str]
+        Mutable legend-label list.
+    title : str
+        Section heading.
+    entries : list[tuple]
+        Section entries.
+    mode : str
+        Visual encoding mode: ``color``, ``shape``, ``fill``, or ``lightness``.
+    show_single_entry : bool
+        Whether to retain a section containing only one entry.
+    """
     if not entries or (len(entries) == 1 and not show_single_entry):
         return
     handles.append(mpatches.Patch(color="none", label=title))
@@ -322,7 +525,22 @@ def add_scatter_legends(
     loc: str = "upper left",
     bbox_to_anchor: tuple = (1.02, 1.0),
 ) -> None:
-    """Add a combined color, shape, fill, and lightness legend to an axis."""
+    """
+    Add a combined color, shape, fill, and lightness legend to an axis.
+
+    Parameters
+    ----------
+    ax : Any
+        Axis receiving the legend.
+    legend_info : dict
+        Legend sections returned by :func:`build_legend_info`.
+    has_pareto_line : bool
+        Whether to include a Pareto-front line entry.
+    loc : str
+        Matplotlib legend location.
+    bbox_to_anchor : tuple
+        Matplotlib legend anchor coordinates.
+    """
     handles: list[Any] = []
     labels: list[str] = []
     if has_pareto_line:
@@ -365,13 +583,41 @@ def add_scatter_legends(
 
 
 def build_label_color_map(labels: list[str]) -> dict[str, tuple]:
-    """Return a label-string → RGB color dict using the tab10 palette."""
+    """
+    Return a label-string to RGB color mapping using the tab10 palette.
+
+    Parameters
+    ----------
+    labels : list[str]
+        Labels to assign colors.
+
+    Returns
+    -------
+    dict[str, tuple]
+        Unique label to RGB(A) color mapping.
+    """
     base_cmap = plt.get_cmap("tab10")
     return {lbl: base_cmap(i % base_cmap.N) for i, lbl in enumerate(sorted(set(labels)))}
 
 
 def pivot_for_line(df: pd.DataFrame, x_col: str, metric: str) -> pd.DataFrame:
-    """Return a (label x x_col) pivot suitable for line plots."""
+    """
+    Return a label-by-x pivot suitable for line plots.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Benchmark rows.
+    x_col : str
+        Column used for the horizontal axis.
+    metric : str
+        Column used for line values.
+
+    Returns
+    -------
+    pd.DataFrame
+        Mean metric indexed by display label and pivoted by ``x_col``.
+    """
     df = df.copy()
     if "label" not in df.columns:
         df["label"] = df.apply(alg_label, axis=1)
@@ -381,7 +627,21 @@ def pivot_for_line(df: pd.DataFrame, x_col: str, metric: str) -> pd.DataFrame:
 
 
 def compute_pareto_front(xs: list[float], ys: list[float]) -> list[bool]:
-    """Return boolean mask of Pareto-optimal points (minimise both x and y)."""
+    """
+    Return boolean mask of Pareto-optimal points, minimizing both axes.
+
+    Parameters
+    ----------
+    xs : list[float]
+        Horizontal coordinates of the candidate points.
+    ys : list[float]
+        Vertical coordinates of the candidate points. Its length must match ``xs``.
+
+    Returns
+    -------
+    list[bool]
+        ``True`` for points not strictly dominated by another point.
+    """
     n = len(xs)
     is_pareto = [True] * n
     for i in range(n):
@@ -414,7 +674,42 @@ def draw_scatter_plot(
     add_reference_lines: bool = True,
     reference_value: float = 1.0,
 ) -> None:
-    """Draw a scatter panel with optional Pareto-front highlighting."""
+    """
+    Draw a scatter panel with optional Pareto-front highlighting.
+
+    Parameters
+    ----------
+    ax : Any
+        Axis receiving the points.
+    sub : pd.DataFrame
+        Rows containing labels and x/y metric columns.
+    color_map : dict[str, tuple] | None
+        Optional display-label color mapping.
+    marker_map : dict[str, str] | None
+        Optional display-label marker mapping.
+    fill_map : dict[str, bool] | None
+        Optional display-label fill mapping.
+    x_col : str
+        DataFrame column for the horizontal axis.
+    y_col : str
+        DataFrame column for the vertical axis.
+    x_label : str
+        Label for the horizontal axis.
+    y_label : str
+        Label for the vertical axis.
+    title : str | None
+        Optional title.
+    force_title : bool
+        Whether to force the title despite global title settings.
+    pareto : bool
+        Whether to highlight and connect Pareto-optimal points.
+    floor_at_one : bool
+        Whether to use one as the lower bound for each axis.
+    add_reference_lines : bool
+        Whether to draw reference lines at ``reference_value``.
+    reference_value : float
+        Value used for reference lines.
+    """
     sub = cast("Any", sub)
     xs = sub[x_col].tolist()
     ys = sub[y_col].tolist()
@@ -506,7 +801,24 @@ def draw_bar_chart(
     *,
     reference_label: str | None = None,
 ) -> None:
-    """Draw the consistently styled horizontal bars used throughout the analysis."""
+    """
+    Draw the consistently styled horizontal bars used throughout the analysis.
+
+    Parameters
+    ----------
+    ax : Any
+        Axis receiving the bars.
+    df : pd.DataFrame
+        Rows containing ``label`` and the requested metric.
+    metric : str
+        Column plotted on the horizontal axis.
+    color_map : dict[str, tuple] | None
+        Optional display-label to color mapping.
+    pareto_labels : set[str] | None
+        Labels marked with a Pareto star.
+    reference_label : str | None
+        Optional legend label for the vertical best-result reference line.
+    """
     labels = df["label"].tolist()
     display_labels = [
         f"\u2605 {to_math_label(label)}"
@@ -527,7 +839,14 @@ def draw_bar_chart(
 
 
 def bold_pareto_ticks(axes: list[Any]) -> None:
-    """Emphasize tick labels marked as Pareto-optimal."""
+    """
+    Emphasize tick labels marked as Pareto-optimal.
+
+    Parameters
+    ----------
+    axes : list[Any]
+        Axes whose y tick labels are inspected.
+    """
     for ax in axes:
         for tick in ax.yaxis.get_ticklabels():
             if tick.get_text().startswith("\u2605"):
@@ -545,7 +864,30 @@ def plot_bar_chart(
     color_map: dict[str, tuple] | None = None,
     pareto_labels: set | None = None,
 ) -> None:
-    """Create and save a sorted horizontal bar chart."""
+    """
+    Create and save a sorted horizontal bar chart.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Rows containing the selected metric and label column.
+    metric : str
+        Metric column to plot.
+    title : str
+        Figure title.
+    xlabel : str
+        Horizontal-axis label.
+    save_path : Path
+        Destination image path.
+    label_col : str
+        Column containing display labels.
+    reference_line : float | None
+        Optional vertical reference value.
+    color_map : dict[str, tuple] | None
+        Optional display-label color mapping.
+    pareto_labels : set | None
+        Labels marked as Pareto-optimal.
+    """
     sorted_df = cast("pd.DataFrame", df.sort_values(metric)).rename(columns={label_col: "label"})
     fig, ax = plt.subplots(figsize=(9, max(4, len(sorted_df) * 0.35)))
     draw_bar_chart(
@@ -570,7 +912,25 @@ def plot_bar_chart(
 def create_panel_grid(
     n_panels: int, width_per_col: float, height_per_row: float
 ) -> tuple[Any, np.ndarray]:
-    """Create subplot grid with at most 2 panels per row."""
+    """
+    Create a subplot grid with at most two panels per row.
+
+    Parameters
+    ----------
+    n_panels : int
+        Number of visible panels.
+    width_per_col : float
+        Figure width allocated to each column.
+    height_per_row : float
+        Figure height allocated to each row.
+
+    Returns
+    -------
+    fig : Any
+        Created figure.
+    axes : np.ndarray
+        One-dimensional array containing the visible axes.
+    """
     n_cols = 1 if n_panels <= 1 else min(2, n_panels)
     n_rows = int(np.ceil(n_panels / n_cols))
     fig, axes = plt.subplots(
@@ -593,9 +953,27 @@ def save_with_log_variant(
     log_y_axis: bool = False,
 ) -> None:
     """
-    Save *linear_path* (linear scale), then a log-scale variant (*_log.png).
+    Save ``linear_path`` (linear scale), then a log-scale variant named ``*_log.png``.
 
     Axes titles get " (log)" appended in the log version. The figure is closed after both saves.
+
+    Parameters
+    ----------
+    fig : Any
+        Figure to save.
+    axes_list : list[Any]
+        Axes whose scales and titles are updated for the log variant.
+    linear_path : Path
+        Destination for the linear-scale image.
+    log_x_axis : bool
+        Whether to use a logarithmic x-axis in the second image.
+    log_y_axis : bool
+        Whether to use a logarithmic y-axis in the second image.
+
+    Returns
+    -------
+    None
+        The figure is saved and closed.
     """
     fig.savefig(linear_path, dpi=450, bbox_inches="tight")
     for ax in axes_list:

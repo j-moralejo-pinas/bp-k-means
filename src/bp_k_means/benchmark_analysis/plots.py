@@ -36,7 +36,24 @@ def plot_overall(
     fill_map: dict[str, bool] | None = None,
     legend_info: dict | None = None,
 ) -> None:
-    """Create aggregate bar, line, scatter, and Pareto plots."""
+    """
+    Create aggregate bar, line, scatter, and Pareto plots.
+
+    Parameters
+    ----------
+    overall : pd.DataFrame
+        Aggregated benchmark rows containing relative metric columns.
+    save_dir : Path
+        Directory receiving the generated figures.
+    color_map : dict[str, tuple] | None
+        Optional display-label color mapping.
+    marker_map : dict[str, str] | None
+        Optional display-label marker mapping.
+    fill_map : dict[str, bool] | None
+        Optional display-label fill mapping.
+    legend_info : dict | None
+        Optional legend sections for scatter figures.
+    """
     overall = cast("Any", overall)
     overall = overall.copy()
     if "label" not in overall.columns:
@@ -123,14 +140,46 @@ def plot_overall(
 
 
 def _group_rows(df: pd.DataFrame, column: str, value: Any) -> pd.DataFrame:
-    """Return the rows belonging to one plot panel."""
+    """
+    Return the rows belonging to one plot panel.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing the grouping column.
+    column : str
+        Column used to select rows.
+    value : Any
+        Group value to match.
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy containing only rows whose ``column`` equals ``value``.
+    """
     return cast("pd.DataFrame", df[df[column] == value].copy())
 
 
 def _pareto_labels_by_group(
     df: pd.DataFrame, group_col: str, groups: list[Any]
 ) -> dict[Any, set[str]]:
-    """Collect Pareto-optimal labels for every panel."""
+    """
+    Collect Pareto-optimal labels for every panel.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Aggregated rows containing group and relative metric columns.
+    group_col : str
+        Column defining panels.
+    groups : list[Any]
+        Group values to inspect.
+
+    Returns
+    -------
+    dict[Any, set[str]]
+        Group value to set of Pareto-optimal display labels.
+    """
     result = {}
     for group in groups:
         rows = _group_rows(df, group_col, group)
@@ -153,6 +202,28 @@ def _plot_grouped_bars(
     save_path: Path,
     color_map: dict[str, tuple] | None,
 ) -> None:
+    """
+    Create one horizontal-bar panel per group.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Aggregated benchmark rows.
+    group_col : str
+        Column defining panels.
+    groups : list[Any]
+        Group values to plot.
+    metric : str
+        Metric column plotted in each panel.
+    title : str
+        Figure title.
+    panel_title : Callable[[Any], str]
+        Function converting a group value to a panel title.
+    save_path : Path
+        Destination image path.
+    color_map : dict[str, tuple] | None
+        Optional display-label color mapping.
+    """
     pareto_labels = _pareto_labels_by_group(df, group_col, groups)
     fig, axes = create_panel_grid(
         len(groups),
@@ -194,6 +265,32 @@ def _plot_grouped_line(
     *,
     set_x_ticks: bool,
 ) -> None:
+    """
+    Create one line plot showing metric values across groups.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Aggregated benchmark rows.
+    group_col : str
+        Column used as the x-axis grouping.
+    groups : list[Any]
+        Ordered group values.
+    metric : str
+        Metric column plotted.
+    title : str
+        Figure title.
+    x_label : str
+        Horizontal-axis label.
+    save_path : Path
+        Destination image path.
+    color_map : dict[str, tuple] | None
+        Optional display-label color mapping.
+    marker_map : dict[str, str] | None
+        Optional display-label marker mapping.
+    set_x_ticks : bool
+        Whether to explicitly set x ticks to ``groups``.
+    """
     pivot = pivot_for_line(df, x_col=group_col, metric=metric)[groups]
     fig, ax = plt.subplots(figsize=(10, 6))
     for label, row in pivot.iterrows():
@@ -236,6 +333,34 @@ def _plot_grouped_scatter(
     *,
     pareto: bool,
 ) -> None:
+    """
+    Create one scatter-panel figure per group.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Aggregated benchmark rows.
+    group_col : str
+        Column defining panels.
+    groups : list[Any]
+        Group values to plot.
+    title : str
+        Figure title.
+    panel_title : Callable[[Any], str]
+        Function converting a group value to a panel title.
+    save_path : Path
+        Destination image path.
+    color_map : dict[str, tuple] | None
+        Optional display-label color mapping.
+    marker_map : dict[str, str] | None
+        Optional display-label marker mapping.
+    fill_map : dict[str, bool] | None
+        Optional display-label fill mapping.
+    legend_info : dict | None
+        Optional legend sections.
+    pareto : bool
+        Whether to highlight each panel's Pareto front.
+    """
     fig, axes = create_panel_grid(len(groups), width_per_col=8, height_per_row=6)
     for ax, group in zip(axes, groups, strict=False):
         draw_scatter_plot(
@@ -278,7 +403,40 @@ def _plot_by_group(
     *,
     set_line_x_ticks: bool,
 ) -> None:
-    """Create bars, lines, scatter plots, and Pareto plots for a grouping."""
+    """
+    Create bars, lines, scatter plots, and Pareto plots for a grouping.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Aggregated benchmark rows.
+    group_col : str
+        Column defining plot panels.
+    groups : list[Any]
+        Ordered group values to plot.
+    file_prefix : str
+        Prefix used for output filenames.
+    title_suffix : str
+        Text describing the grouping in titles.
+    line_x_label : str
+        Horizontal-axis label for line plots.
+    bar_panel_title : Callable[[Any], str]
+        Function converting group values to bar-panel titles.
+    scatter_panel_title : Callable[[Any], str]
+        Function converting group values to scatter-panel titles.
+    color_map : dict[str, tuple] | None
+        Optional display-label color mapping.
+    marker_map : dict[str, str] | None
+        Optional display-label marker mapping.
+    fill_map : dict[str, bool] | None
+        Optional display-label fill mapping.
+    legend_info : dict | None
+        Optional scatter legend sections.
+    save_dir : Path
+        Output directory.
+    set_line_x_ticks : bool
+        Whether line plots should explicitly set group ticks.
+    """
     if not groups:
         return
     df = df.copy()
@@ -332,7 +490,24 @@ def plot_by_k_multiplier(
     fill_map: dict[str, bool] | None = None,
     legend_info: dict | None = None,
 ) -> None:
-    """Create aggregate plots grouped by requested cluster multiplier."""
+    """
+    Create aggregate plots grouped by requested cluster multiplier.
+
+    Parameters
+    ----------
+    by_k_mult : pd.DataFrame
+        Aggregated rows containing ``k_multiplier`` and relative metrics.
+    save_dir : Path
+        Output directory for generated figures.
+    color_map : dict[str, tuple] | None
+        Optional display-label color mapping.
+    marker_map : dict[str, str] | None
+        Optional display-label marker mapping.
+    fill_map : dict[str, bool] | None
+        Optional display-label fill mapping.
+    legend_info : dict | None
+        Optional scatter legend sections.
+    """
     groups = sorted(by_k_mult["k_multiplier"].unique())
     _plot_by_group(
         by_k_mult,
@@ -360,7 +535,24 @@ def plot_by_size_bin(
     fill_map: dict[str, bool] | None = None,
     legend_info: dict | None = None,
 ) -> None:
-    """Create aggregate plots grouped by dataset size bin."""
+    """
+    Create aggregate plots grouped by dataset size bin.
+
+    Parameters
+    ----------
+    by_size : pd.DataFrame
+        Aggregated rows containing ``size_bin`` and relative metrics.
+    save_dir : Path
+        Output directory for generated figures.
+    color_map : dict[str, tuple] | None
+        Optional display-label color mapping.
+    marker_map : dict[str, str] | None
+        Optional display-label marker mapping.
+    fill_map : dict[str, bool] | None
+        Optional display-label fill mapping.
+    legend_info : dict | None
+        Optional scatter legend sections.
+    """
     groups = [label for label in SIZE_BIN_LABELS if label in by_size["size_bin"].to_numpy()]
     _plot_by_group(
         by_size,

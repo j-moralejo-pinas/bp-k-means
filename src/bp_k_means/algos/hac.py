@@ -1,20 +1,39 @@
 """Label-constrained hierarchical agglomerative clustering routines."""
 
+from __future__ import annotations
+
 from heapq import heappop, heappush
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
 
 from bp_k_means.algos.base_algo import BaseAlgo
+
+if TYPE_CHECKING:
+    from numpy.typing import ArrayLike, NDArray
 
 MIN_CLUSTER_SIZE = 2
 
 
 def _build_ward_queue(
     label_to_indices: dict[object, list[int]],
-    centroids: dict[int, "np.ndarray"],
+    centroids: dict[int, np.ndarray],
 ) -> list[tuple[float, int, int]]:
-    """Build the initial same-label Ward priority queue."""
+    """
+    Build the initial same-label Ward priority queue.
+
+    Parameters
+    ----------
+    label_to_indices : dict[object, list[int]]
+        Mapping from source labels to their point or cluster identifiers.
+    centroids : dict[int, np.ndarray]
+        Mapping from cluster identifier to centroid.
+
+    Returns
+    -------
+    list[tuple[float, int, int]]
+        Heap entries ``(merge_cost, cluster_a, cluster_b)``.
+    """
     pq = []
     for idxs in label_to_indices.values():
         for ii, i in enumerate(idxs):
@@ -30,13 +49,36 @@ def _merge_ward_clusters(
     b: int,
     new_id: int,
     clusters: dict[int, list[int]],
-    cluster_label: dict[int, object],
+    cluster_label: dict[int, Any],
     active: set[int],
     sizes: dict[int, int],
-    centroids: dict[int, "np.ndarray"],
+    centroids: dict[int, np.ndarray],
     pq: list[tuple[float, int, int]],
 ) -> None:
-    """Merge two active Ward clusters and enqueue their new candidates."""
+    """
+    Merge two active Ward clusters and enqueue their new candidates.
+
+    Parameters
+    ----------
+    a : int
+        First active cluster identifier to merge.
+    b : int
+        Second active cluster identifier to merge.
+    new_id : int
+        Identifier assigned to the merged cluster.
+    clusters : dict[int, list[int]]
+        Mutable cluster-membership mapping.
+    cluster_label : dict[int, Any]
+        Mapping from cluster identifier to source label.
+    active : set[int]
+        Mutable set of active cluster identifiers.
+    sizes : dict[int, int]
+        Mutable cluster-size mapping.
+    centroids : dict[int, np.ndarray]
+        Mutable centroid mapping.
+    pq : list[tuple[float, int, int]]
+        Mutable Ward priority queue.
+    """
     clusters[new_id] = clusters[a] + clusters[b]
     cluster_label[new_id] = cluster_label[a]
     active.remove(a)
@@ -63,8 +105,24 @@ def _merge_ward_clusters(
 
 def _assign_ward_labels(
     active: set[int], clusters: dict[int, list[int]], n_samples: int
-) -> "np.ndarray":
-    """Renumber active Ward clusters and assign their member points."""
+) -> np.ndarray:
+    """
+    Renumber active Ward clusters and assign their member points.
+
+    Parameters
+    ----------
+    active : set[int]
+        Active cluster identifiers.
+    clusters : dict[int, list[int]]
+        Mapping from cluster identifier to member point indices.
+    n_samples : int
+        Number of input points.
+
+    Returns
+    -------
+    np.ndarray
+        Dense cluster labels indexed by input point.
+    """
     active_list = sorted(active)
     new_id_map = {old: i for i, old in enumerate(active_list)}
     labels_final = np.zeros(n_samples, dtype=int)
@@ -75,7 +133,7 @@ def _assign_ward_labels(
     return labels_final
 
 
-def hac_ward_by_label(X: "np.ndarray", y: "np.ndarray", target_k: int) -> "np.ndarray":
+def hac_ward_by_label(X: np.ndarray, y: np.ndarray, target_k: int) -> np.ndarray:
     """
     Hierarchical agglomerative clustering using Ward's criterion.
 
@@ -167,9 +225,27 @@ def hac_ward_by_label(X: "np.ndarray", y: "np.ndarray", target_k: int) -> "np.nd
 
 
 def _ward_distance(
-    a: int, b: int, sizes: dict[int, int], centroids: dict[int, "np.ndarray"]
+    a: int, b: int, sizes: dict[int, int], centroids: dict[int, np.ndarray]
 ) -> float:
-    """Return Ward's merge cost for two clusters."""
+    """
+    Return Ward's merge cost for two clusters.
+
+    Parameters
+    ----------
+    a : int
+        First cluster identifier.
+    b : int
+        Second cluster identifier.
+    sizes : dict[int, int]
+        Cluster sizes indexed by identifier.
+    centroids : dict[int, np.ndarray]
+        Cluster centroids indexed by identifier.
+
+    Returns
+    -------
+    float
+        Increase in within-cluster sum of squares caused by the merge.
+    """
     n_a, n_b = sizes[a], sizes[b]
     diff = centroids[a] - centroids[b]
     return (n_a * n_b) / (n_a + n_b) * np.dot(diff, diff)
@@ -179,9 +255,27 @@ def _nearest_neighbor(
     cluster_id: int,
     cluster_ids: set[int],
     sizes: dict[int, int],
-    centroids: dict[int, "np.ndarray"],
+    centroids: dict[int, np.ndarray],
 ) -> int:
-    """Find the nearest cluster in one label group."""
+    """
+    Find the nearest cluster in one label group.
+
+    Parameters
+    ----------
+    cluster_id : int
+        Cluster whose neighbor is requested.
+    cluster_ids : set[int]
+        Candidate clusters in the same source-label group.
+    sizes : dict[int, int]
+        Cluster sizes indexed by identifier.
+    centroids : dict[int, np.ndarray]
+        Cluster centroids indexed by identifier.
+
+    Returns
+    -------
+    int
+        Identifier of the lowest-cost candidate, or ``-1`` if none exists.
+    """
     best_cluster = -1
     best_distance = np.inf
     for candidate in cluster_ids:
@@ -197,9 +291,25 @@ def _nearest_neighbor(
 def _next_nnc_merge(
     cluster_ids: set[int],
     sizes: dict[int, int],
-    centroids: dict[int, "np.ndarray"],
+    centroids: dict[int, np.ndarray],
 ) -> tuple[float, int, int]:
-    """Find a reciprocal nearest-neighbor merge for one label group."""
+    """
+    Find a reciprocal nearest-neighbor merge for one label group.
+
+    Parameters
+    ----------
+    cluster_ids : set[int]
+        Active clusters in one source-label group.
+    sizes : dict[int, int]
+        Cluster sizes indexed by identifier.
+    centroids : dict[int, np.ndarray]
+        Cluster centroids indexed by identifier.
+
+    Returns
+    -------
+    tuple[float, int, int]
+        Ward cost and the reciprocal cluster identifiers.
+    """
     chain = [next(iter(cluster_ids))]
     while True:
         a = chain[-1]
@@ -212,11 +322,33 @@ def _next_nnc_merge(
 def _build_nnc_hierarchy(
     cluster_ids: set[int],
     sizes: dict[int, int],
-    centroids: dict[int, "np.ndarray"],
+    centroids: dict[int, np.ndarray],
     cluster_members: dict[int, list[int]],
     next_cid: int,
 ) -> tuple[list[tuple[float, int, int, int, int]], int]:
-    """Build one complete nearest-neighbor-chain hierarchy."""
+    """
+    Build one complete nearest-neighbor-chain hierarchy.
+
+    Parameters
+    ----------
+    cluster_ids : set[int]
+        Initial active clusters for one source label.
+    sizes : dict[int, int]
+        Mutable cluster sizes.
+    centroids : dict[int, np.ndarray]
+        Mutable cluster centroids.
+    cluster_members : dict[int, list[int]]
+        Mutable mapping from cluster identifier to point members.
+    next_cid : int
+        Identifier to use for the first generated parent cluster.
+
+    Returns
+    -------
+    merge_events : list[tuple[float, int, int, int, int]]
+        Merge records ``(cost, depth, left, right, parent)``.
+    next_cid : int
+        Next unused cluster identifier.
+    """
     active = set(cluster_ids)
     depth = dict.fromkeys(cluster_ids, 0)
     merge_events = []
@@ -239,9 +371,28 @@ def _merge_nnc_clusters(
     cluster_ids: set[int],
     active: set[int],
     sizes: dict[int, int],
-    centroids: dict[int, "np.ndarray"],
+    centroids: dict[int, np.ndarray],
 ) -> None:
-    """Merge two nearest-neighbor-chain clusters."""
+    """
+    Merge two nearest-neighbor-chain clusters.
+
+    Parameters
+    ----------
+    a : int
+        First cluster identifier to merge.
+    b : int
+        Second cluster identifier to merge.
+    new_id : int
+        Identifier for the merged cluster.
+    cluster_ids : set[int]
+        Mutable cluster set used by the chain.
+    active : set[int]
+        Mutable active cluster set when distinct from ``cluster_ids``.
+    sizes : dict[int, int]
+        Mutable cluster sizes.
+    centroids : dict[int, np.ndarray]
+        Mutable cluster centroids.
+    """
     n_a, n_b = sizes[a], sizes[b]
     centroids[new_id] = (n_a * centroids[a] + n_b * centroids[b]) / (n_a + n_b)
     sizes[new_id] = n_a + n_b
@@ -256,7 +407,7 @@ def _merge_nnc_clusters(
     del sizes[a], sizes[b]
 
 
-def hac_ward_nnc_by_label(X: "np.ndarray", y: "np.ndarray", target_k: int) -> "np.ndarray":
+def hac_ward_nnc_by_label(X: np.ndarray, y: np.ndarray, target_k: int) -> np.ndarray:
     """
     Hierarchical agglomerative clustering using Ward linkage and a nearest-neighbor chain.
 
@@ -316,7 +467,11 @@ def hac_ward_nnc_by_label(X: "np.ndarray", y: "np.ndarray", target_k: int) -> "n
 
     for label in labels:
         label_events, next_cid = _build_nnc_hierarchy(
-            label_clusters[label], sizes, centroids, cluster_members, next_cid,
+            label_clusters[label],
+            sizes,
+            centroids,
+            cluster_members,
+            next_cid,
         )
         merge_events.extend(label_events)
 
@@ -330,14 +485,35 @@ def hac_ward_nnc_by_label(X: "np.ndarray", y: "np.ndarray", target_k: int) -> "n
 
 
 class _WardPredictor(BaseAlgo):
-    """Shared prediction rule for fitted Ward hierarchy cuts."""
+    """
+    Shared prediction rule for fitted Ward hierarchy cuts.
+
+    Notes
+    -----
+    Prediction assigns each sample to the compatible cluster with the smallest
+    Ward insertion cost, rather than simply using Euclidean centroid distance.
+    """
 
     def predict(
         self,
         X: ArrayLike,
         y: ArrayLike,
-    ) -> "NDArray":
-        """Assign instances by the Ward cost of joining each fitted cluster."""
+    ) -> NDArray:
+        """
+        Assign instances by the Ward cost of joining each fitted cluster.
+
+        Parameters
+        ----------
+        X : ArrayLike
+            Feature matrix to predict.
+        y : ArrayLike
+            Source label for each input row.
+
+        Returns
+        -------
+        NDArray
+            Predicted cluster identifier for each row.
+        """
         X_array, y_array = self._validate_prediction_input(X, y)
         assert self._cluster_sizes is not None
         costs = self._squared_centroid_distances(X_array)
@@ -353,8 +529,9 @@ class HACWard(_WardPredictor):
         X: ArrayLike,
         y: ArrayLike,
         target_k: int,
-    ) -> "HACWard":
-        """Fit label-constrained Ward hierarchical clustering.
+    ) -> HACWard:
+        """
+        Fit label-constrained Ward hierarchical clustering.
 
         Parameters
         ----------
@@ -369,11 +546,6 @@ class HACWard(_WardPredictor):
         -------
         HACWard
             The fitted algorithm instance.
-
-        Raises
-        ------
-        ValueError
-            If the target cluster count is infeasible.
         """
         y_array = np.asarray(y)
         labels = hac_ward_by_label(np.asarray(X), y_array, target_k)
@@ -388,8 +560,9 @@ class HACWardNNC(_WardPredictor):
         X: ArrayLike,
         y: ArrayLike,
         target_k: int,
-    ) -> "HACWardNNC":
-        """Fit nearest-neighbor-chain Ward hierarchical clustering.
+    ) -> HACWardNNC:
+        """
+        Fit nearest-neighbor-chain Ward hierarchical clustering.
 
         Parameters
         ----------
@@ -404,11 +577,6 @@ class HACWardNNC(_WardPredictor):
         -------
         HACWardNNC
             The fitted algorithm instance.
-
-        Raises
-        ------
-        ValueError
-            If the target cluster count is infeasible.
         """
         y_array = np.asarray(y)
         labels = hac_ward_nnc_by_label(np.asarray(X), y_array, target_k)

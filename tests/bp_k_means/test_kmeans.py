@@ -28,7 +28,9 @@ def test_kmeans_plus_plus_keeps_existing_centroids_and_draws_data_points() -> No
 def test_kmeans_plus_plus_rejects_too_many_existing_centroids() -> None:
     with pytest.raises(ValueError, match="Existing centroids"):
         kmeans_plus_plus_init(
-            np.array([[0.0], [1.0]]), 1, seed=0,
+            np.array([[0.0], [1.0]]),
+            1,
+            seed=0,
             existing_centroids=np.array([[0.0], [1.0]]),
         )
 
@@ -41,9 +43,7 @@ def test_random_init_selects_distinct_points_and_preserves_existing_centroids() 
 
     np.testing.assert_array_equal(result[0], existing[0])
     assert len({tuple(row) for row in result}) == 3
-    assert {tuple(row) for row in result[1:]} <= {
-        tuple(row) for row in X if row[0] != 1.0
-    }
+    assert {tuple(row) for row in result[1:]} <= {tuple(row) for row in X if row[0] != 1.0}
 
 
 def test_subsampled_initializer_only_returns_points_from_the_input() -> None:

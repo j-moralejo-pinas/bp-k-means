@@ -63,11 +63,16 @@ def test_update_centroids_computes_means_and_reseeds_empty_clusters() -> None:
 
 @pytest.mark.parametrize("ensure_label", [True, False])
 def test_cop_kmeans_is_label_pure_and_returns_cluster_means(
-    two_label_points: tuple[np.ndarray, np.ndarray], ensure_label: bool,
+    two_label_points: tuple[np.ndarray, np.ndarray],
+    ensure_label: bool,
 ) -> None:
     X, y = two_label_points
     labels, centroids = cop_kmeans_cannot_link(
-        X, y, 2, seed=3, init_ensure_label=ensure_label,
+        X,
+        y,
+        2,
+        seed=3,
+        init_ensure_label=ensure_label,
     )
 
     assert labels is not None
@@ -90,6 +95,7 @@ def test_cop_wrapper_retains_best_feasible_result(
     model = COPKMeansCannotLink(seed=0, n_init=2)
 
     assert model.fit_predict(X, y, 2) is model.labels_
+    assert model.labels_ is not None
     assert_label_pure(model.labels_, y)
     assert model.centroids_ is not None
     assert_label_pure(model.predict(X, y), y)

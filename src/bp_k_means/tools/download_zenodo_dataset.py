@@ -12,7 +12,16 @@ DATASET_DIR = Path(__file__).resolve().parents[3] / "data" / "datasets"
 
 
 def main() -> None:
-    """Download each file in the configured Zenodo record if it is not present locally."""
+    """
+    Download each configured Zenodo file if it is not present locally.
+
+    Raises
+    ------
+    Exception
+        If a remote file cannot be downloaded or a downloaded file cannot be written.
+    SystemExit
+        If the Zenodo record is not configured or contains no files.
+    """
     if ZENODO_RECORD_ID == "REPLACE_WITH_RECORD_ID":
         msg = "Set ZENODO_RECORD_ID in bp_k_means/tools/download_zenodo_dataset.py first."
         raise SystemExit(msg)

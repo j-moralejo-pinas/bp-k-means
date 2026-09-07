@@ -28,7 +28,21 @@ BP_ALGORITHM_PATTERN = re.compile(r"BP-KMeans \((\w+),\s*(\w+),\s*(\w+)\)")
 
 
 def assign_size_bin(n_instances: float, n_labels: int) -> str:
-    """Assign a dataset to a size bin based on its node and label counts."""
+    """
+    Assign a dataset to a size bin based on its node and label counts.
+
+    Parameters
+    ----------
+    n_instances : float
+        Number of rows or nodes in the dataset.
+    n_labels : int
+        Number of source labels in the dataset.
+
+    Returns
+    -------
+    str
+        Human-readable size-bin label.
+    """
     if n_labels > LABEL_COUNT_LIMIT:
         return ">1k labels"
     if n_instances > LARGE_DATASET_LIMIT:
@@ -39,7 +53,20 @@ def assign_size_bin(n_instances: float, n_labels: int) -> str:
 
 
 def read_metadata_files(output_dir: Path) -> list[dict[str, Any]]:
-    """Read benchmark metadata in a stable order."""
+    """
+    Read benchmark metadata in a stable order.
+
+    Parameters
+    ----------
+    output_dir : Path
+        Root directory searched recursively for ``metadata.json`` files.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Successfully decoded metadata objects. Invalid or unreadable files are
+        skipped after a warning is logged.
+    """
     metadata = []
     for path in sorted(output_dir.rglob("metadata.json")):
         try:
@@ -51,7 +78,19 @@ def read_metadata_files(output_dir: Path) -> list[dict[str, Any]]:
 
 
 def _base_metadata_row(meta: dict[str, Any]) -> dict[str, Any]:
-    """Select and normalize fields shared by every benchmark analysis."""
+    """
+    Select and normalize fields shared by every benchmark analysis.
+
+    Parameters
+    ----------
+    meta : dict[str, Any]
+        Raw benchmark metadata record.
+
+    Returns
+    -------
+    dict[str, Any]
+        Normalized analysis row with common benchmark columns.
+    """
     return {
         "dataset": meta["dataset"],
         "algorithm": meta["algorithm"],
@@ -66,12 +105,38 @@ def _base_metadata_row(meta: dict[str, Any]) -> dict[str, Any]:
 
 
 def _is_regular_dataset(dataset: str) -> bool:
+    """
+    Return whether a dataset name belongs to the regular benchmark set.
+
+    Parameters
+    ----------
+    dataset : str
+        Dataset name to classify.
+
+    Returns
+    -------
+    bool
+        ``True`` unless the name contains one of the excluded special-dataset
+        patterns.
+    """
     normalized = dataset.lower()
     return not any(pattern in normalized for pattern in REGULAR_DATASET_EXCLUDE_PATTERNS)
 
 
 def load_all_metadata(output_dir: Path) -> pd.DataFrame:
-    """Load regular benchmark metadata files into one DataFrame."""
+    """
+    Load regular benchmark metadata files into one DataFrame.
+
+    Parameters
+    ----------
+    output_dir : Path
+        Root directory containing benchmark output folders.
+
+    Returns
+    -------
+    pd.DataFrame
+        One normalized row per regular benchmark run.
+    """
     rows = [
         _base_metadata_row(meta)
         for meta in read_metadata_files(output_dir)
@@ -82,7 +147,20 @@ def load_all_metadata(output_dir: Path) -> pd.DataFrame:
 
 
 def load_hac_strength_metadata(output_dir: Path) -> pd.DataFrame:
-    """Load only metadata rows produced by the HAC-strength benchmark."""
+    """
+    Load only metadata rows produced by the HAC-strength benchmark.
+
+    Parameters
+    ----------
+    output_dir : Path
+        Root directory containing benchmark output folders.
+
+    Returns
+    -------
+    pd.DataFrame
+        Normalized HAC-strength rows, including requested and effective target
+        cluster counts.
+    """
     rows = []
     for meta in read_metadata_files(output_dir):
         if meta.get("benchmark_type") != HAC_STRENGTH_BENCHMARK_TYPE:
@@ -100,7 +178,19 @@ def load_hac_strength_metadata(output_dir: Path) -> pd.DataFrame:
 
 
 def load_dataset_sizes(data_dir: Path) -> dict[str, int]:
-    """Read the number of rows from each benchmark dataset file."""
+    """
+    Read the number of rows from each benchmark dataset file.
+
+    Parameters
+    ----------
+    data_dir : Path
+        Directory containing ``*nodes.parquet`` files.
+
+    Returns
+    -------
+    dict[str, int]
+        Mapping from dataset stem to parquet row count.
+    """
     sizes: dict[str, int] = {}
     for path in data_dir.glob("*nodes.parquet"):
         try:
@@ -111,7 +201,20 @@ def load_dataset_sizes(data_dir: Path) -> dict[str, int]:
 
 
 def parse_algorithm_components(df: pd.DataFrame) -> pd.DataFrame:
-    """Add the three BP-KMeans component columns."""
+    """
+    Add the three BP-KMeans component columns.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Benchmark rows containing an ``algorithm`` column.
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of ``df`` with ``ranking_metric``, ``init_strategy``, and
+        ``init_algo`` columns.
+    """
     result = df.copy()
     parsed = result["algorithm"].str.extract(BP_ALGORITHM_PATTERN)
     result["ranking_metric"] = parsed[0]
@@ -121,7 +224,19 @@ def parse_algorithm_components(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def select_bp_vs_bisecting_kmeans(df: pd.DataFrame) -> pd.DataFrame:
-    """Keep standard Bisecting KMeans and BP-KMeans initialized with k-means++."""
+    """
+    Keep standard Bisecting KMeans and BP-KMeans initialized with k-means++.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Benchmark rows containing algorithm names.
+
+    Returns
+    -------
+    pd.DataFrame
+        Filtered copy containing the requested algorithm subset.
+    """
     if df.empty:
         return df.copy()
     parsed = parse_algorithm_components(df)
@@ -132,7 +247,21 @@ def select_bp_vs_bisecting_kmeans(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_dataset_context(df: pd.DataFrame, data_dir: Path) -> pd.DataFrame:
-    """Add dataset sizes, inferred label counts, and publication size bins."""
+    """
+    Add dataset sizes, inferred label counts, and publication size bins.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Benchmark rows containing dataset and cluster-count columns.
+    data_dir : Path
+        Directory containing the benchmark parquet datasets.
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of ``df`` enriched with dataset context columns.
+    """
     result = df.copy()
     result["n_instances"] = result["dataset"].map(load_dataset_sizes(data_dir).get)
     missing_datasets = sorted(result.loc[result["n_instances"].isna(), "dataset"].unique())
@@ -148,7 +277,19 @@ def add_dataset_context(df: pd.DataFrame, data_dir: Path) -> pd.DataFrame:
 
 
 def compute_relative_metrics(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize WCSS and runtime against the best result for each benchmark case."""
+    """
+    Normalize WCSS and runtime against the best result for each benchmark case.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Rows containing ``dataset``, ``k_multiplier``, ``wcss``, and ``time``.
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy with best and relative WCSS/runtime columns.
+    """
     result = df.drop(
         columns=["best_wcss", "best_time", "relative_wcss", "relative_time"],
         errors="ignore",
@@ -162,7 +303,21 @@ def compute_relative_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def aggregate_relative_metrics(df: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
-    """Average both relative metrics for the requested grouping."""
+    """
+    Average both relative metrics for the requested grouping.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Rows containing relative WCSS and runtime columns.
+    group_cols : list[str]
+        Columns defining each aggregation group.
+
+    Returns
+    -------
+    pd.DataFrame
+        Grouped means named ``mean_relative_wcss`` and ``mean_relative_time``.
+    """
     return (
         df.groupby(group_cols, observed=True)
         .agg(
@@ -174,5 +329,17 @@ def aggregate_relative_metrics(df: pd.DataFrame, group_cols: list[str]) -> pd.Da
 
 
 def algorithm_label(row: pd.Series) -> str:
-    """Build a display label from an algorithm row."""
+    """
+    Build a display label from an algorithm row.
+
+    Parameters
+    ----------
+    row : pd.Series
+        Row containing ``algorithm`` and ``n_init`` fields.
+
+    Returns
+    -------
+    str
+        Display label combining algorithm name and initialization count.
+    """
     return f"{row['algorithm']} | n_init={row['n_init']}"

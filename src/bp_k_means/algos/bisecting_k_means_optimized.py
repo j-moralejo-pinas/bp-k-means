@@ -1,32 +1,65 @@
 """Optimized bisecting k-means implementations with label constraints."""
 
+from __future__ import annotations
+
 import heapq
 from typing import TYPE_CHECKING
 
 import numpy as np
-from numpy.typing import ArrayLike
 
 from bp_k_means.algos.base_algo import BaseAlgo
 from bp_k_means.algos.bisecting_tree import _assign_from_hierarchy, _BisectingTreeNode
 from bp_k_means.algos.k_means import kmeans, kmeans_plus_plus_init
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
+    from numpy.typing import ArrayLike, NDArray
 
 MIN_SPLIT_POINTS = 2
 
 
 def _refine_cluster_split(
-    pts: "NDArray",
-    cluster_pts: "NDArray",
-    X2: "NDArray",
+    pts: NDArray,
+    cluster_pts: NDArray,
+    X2: NDArray,
     sum_X2: float,
-    current_centroids: "NDArray",
+    current_centroids: NDArray,
     local_idx: int,
     n_init: int,
     rng: np.random.Generator,
-) -> tuple[float, "NDArray", "NDArray", "NDArray"]:
-    """Find the best refined split for one current cluster."""
+) -> tuple[float, NDArray, NDArray, NDArray]:
+    """
+    Find the best refined split for one current cluster.
+
+    Parameters
+    ----------
+    pts : NDArray
+        All points in the source-label group.
+    cluster_pts : NDArray
+        Points in the cluster being split.
+    X2 : NDArray
+        Squared norms of ``pts``.
+    sum_X2 : float
+        Sum of squared norms in ``X2``.
+    current_centroids : NDArray
+        Current centroids for the source-label group.
+    local_idx : int
+        Index of the cluster to split.
+    n_init : int
+        Number of candidate initializations.
+    rng : np.random.Generator
+        Random generator used by k-means.
+
+    Returns
+    -------
+    best_wcss_total : float
+        WCSS of the best candidate.
+    best_new_labels : NDArray
+        Local labels after the split.
+    best_new_centroids : NDArray
+        Centroids after the split.
+    counts : NDArray
+        Cluster counts from the last evaluated candidate.
+    """
     new_k = current_centroids.shape[0] + 1
     dim = pts.shape[1]
     new_centroids = np.empty((new_k, dim), dtype=current_centroids.dtype)
@@ -63,12 +96,36 @@ def _refine_cluster_split(
 
 
 def _best_bisecting_split(
-    cluster_pts: "NDArray",
-    cluster_X2: "NDArray",
+    cluster_pts: NDArray,
+    cluster_X2: NDArray,
     n_init: int,
     rng: np.random.Generator,
-) -> tuple["NDArray", "NDArray", "NDArray", "NDArray"]:
-    """Find the best independent two-way split for one cluster."""
+) -> tuple[NDArray, NDArray, NDArray, NDArray]:
+    """
+    Find the best independent two-way split for one cluster.
+
+    Parameters
+    ----------
+    cluster_pts : NDArray
+        Points in the cluster to split.
+    cluster_X2 : NDArray
+        Squared norms of ``cluster_pts``.
+    n_init : int
+        Number of two-means attempts.
+    rng : np.random.Generator
+        Random generator used by initialization and k-means.
+
+    Returns
+    -------
+    labels : NDArray
+        Best two-way local assignment.
+    centroids : NDArray
+        Centroids for ``labels``.
+    wcss_per_cluster : NDArray
+        WCSS for each resulting subcluster.
+    counts : NDArray
+        Number of points in each resulting subcluster.
+    """
     best_wcss_total = float("inf")
     best_labels = None
     best_centroids = None
@@ -110,15 +167,36 @@ def _best_bisecting_split(
 def _push_cluster_candidates(
     cluster_heap: list[tuple[float, int, int, int]],
     label_idx: int,
-    counts: "NDArray",
-    wcss_per_cluster: "NDArray",
+    counts: NDArray,
+    wcss_per_cluster: NDArray,
     new_k: int,
     point_count: int,
     generation: int,
     *,
     use_wcss_per_cluster: bool,
 ) -> None:
-    """Add splittable refined clusters to the priority queue."""
+    """
+    Add splittable refined clusters to the priority queue.
+
+    Parameters
+    ----------
+    cluster_heap : list[tuple[float, int, int, int]]
+        Mutable priority queue receiving candidate entries.
+    label_idx : int
+        Source-label index owning the clusters.
+    counts : NDArray
+        Point count for each local cluster.
+    wcss_per_cluster : NDArray
+        WCSS for each local cluster.
+    new_k : int
+        Current number of local clusters.
+    point_count : int
+        Number of points in the source-label group.
+    generation : int
+        Generation number used to invalidate stale entries.
+    use_wcss_per_cluster : bool
+        Whether to use the normalized per-cluster priority formula.
+    """
     for cluster_idx in range(new_k):
         if counts[cluster_idx] <= 1:
             continue
@@ -131,12 +209,42 @@ def _push_cluster_candidates(
 
 
 def _validate_inputs(
-    X: "NDArray",
-    y: "NDArray",
+    X: ArrayLike,
+    y: ArrayLike,
     target_k: int,
     n_init: int,
-) -> tuple["NDArray", "NDArray", int, int]:
-    """Validate shared bisecting k-means inputs and return normalized arrays."""
+) -> tuple[NDArray, NDArray, int, int]:
+    """
+    Validate shared bisecting k-means inputs and return normalized arrays.
+
+    Parameters
+    ----------
+    X : ArrayLike
+        Input feature matrix.
+    y : ArrayLike
+        Source label for each input row.
+    target_k : int
+        Requested total number of clusters.
+    n_init : int
+        Number of fitting attempts per split.
+
+    Returns
+    -------
+    X : NDArray
+        Normalized feature matrix.
+    y : NDArray
+        Normalized source-label array.
+    n_samples : int
+        Number of input rows.
+    n_labels : int
+        Number of unique source labels.
+
+    Raises
+    ------
+    ValueError
+        If ``n_init`` is less than one or ``target_k`` is below the number
+        of source labels.
+    """
     X = np.asarray(X)
     y = np.asarray(y)
     n_samples = X.shape[0]
@@ -154,14 +262,14 @@ def _validate_inputs(
 
 
 def bisecting_kmeans_by_label_optimized(
-    X: "NDArray",
-    y: "NDArray",
+    X: NDArray,
+    y: NDArray,
     target_k: int,
     seed: int | np.random.Generator,
     n_init: int,
     *,
     use_wcss_per_cluster: bool = True,
-) -> "NDArray":
+) -> NDArray:
     """
     Divisive hierarchical clustering (bisecting k-means) with a label constraint.
 
@@ -186,7 +294,7 @@ def bisecting_kmeans_by_label_optimized(
     Returns
     -------
     NDArray
-        Cluster ids in [0, target_k - 1].
+        Global cluster labels for every input row.
 
     Raises
     ------
@@ -339,12 +447,12 @@ def bisecting_kmeans_by_label_optimized(
 
 
 def _fit_bisecting_kmeans_by_label_optimized_no_refine(
-    X: "NDArray",
-    y: "NDArray",
+    X: NDArray,
+    y: NDArray,
     target_k: int,
     seed: int | np.random.Generator,
     n_init: int,
-) -> tuple["NDArray", dict[object, _BisectingTreeNode]]:
+) -> tuple[NDArray, dict[object, _BisectingTreeNode]]:
     """
     Divisive hierarchical clustering (bisecting k-means) with a label constraint.
 
@@ -366,8 +474,8 @@ def _fit_bisecting_kmeans_by_label_optimized_no_refine(
 
     Returns
     -------
-    NDArray
-        Cluster ids in [0, target_k - 1].
+    tuple[NDArray, dict[object, _BisectingTreeNode]]
+        Global cluster labels and fitted hierarchy roots by source label.
     """
     X, y, n_samples, n_labels = _validate_inputs(X, y, target_k, n_init)
     rng = np.random.default_rng(seed)
@@ -498,26 +606,78 @@ def _fit_bisecting_kmeans_by_label_optimized_no_refine(
 
 
 def bisecting_kmeans_by_label_optimized_no_refine(
-    X: "NDArray",
-    y: "NDArray",
+    X: NDArray,
+    y: NDArray,
     target_k: int,
     seed: int | np.random.Generator,
     n_init: int,
-) -> "NDArray":
-    """Run non-refined bisecting k-means and return its fitted labels."""
+) -> NDArray:
+    """
+    Run non-refined bisecting k-means and return its fitted labels.
+
+    Parameters
+    ----------
+    X : NDArray
+        Input feature matrix.
+    y : NDArray
+        Source label for each input row.
+    target_k : int
+        Desired total number of clusters.
+    seed : int | np.random.Generator
+        Random seed or generator used by each split.
+    n_init : int
+        Number of two-means attempts per split.
+
+    Returns
+    -------
+    NDArray
+        Global cluster identifier for every input row.
+    """
     labels, _ = _fit_bisecting_kmeans_by_label_optimized_no_refine(X, y, target_k, seed, n_init)
     return labels
 
 
 class BisectingKMeans(BaseAlgo):
-    """Common-interface wrapper around refined bisecting k-means."""
+    """
+    Common-interface wrapper around refined bisecting k-means.
+
+    Parameters
+    ----------
+    seed : int | np.random.Generator
+        Random seed or generator shared by the fitting implementation.
+    n_init : int
+        Number of independent fitting attempts.
+    use_wcss_per_cluster : bool
+        Whether split candidates are prioritized by per-cluster WCSS.
+
+    Attributes
+    ----------
+    use_wcss_per_cluster : bool
+        Whether split candidates are prioritized by per-cluster WCSS.
+    """
+
+    use_wcss_per_cluster: bool
 
     def predict(
         self,
         X: ArrayLike,
         y: ArrayLike,
-    ) -> "NDArray":
-        """Assign instances to the refined bisecting leaf centroids."""
+    ) -> NDArray:
+        """
+        Assign instances to the refined bisecting leaf centroids.
+
+        Parameters
+        ----------
+        X : ArrayLike
+            Feature matrix to predict.
+        y : ArrayLike
+            Source label for each input row.
+
+        Returns
+        -------
+        NDArray
+            Predicted cluster identifier for each row.
+        """
         return self._predict_nearest_centroid(X, y)
 
     def __init__(
@@ -527,17 +687,6 @@ class BisectingKMeans(BaseAlgo):
         *,
         use_wcss_per_cluster: bool = True,
     ) -> None:
-        """Initialize refined bisecting k-means.
-
-        Parameters
-        ----------
-        seed : int | np.random.Generator
-            Seed or random generator used by the algorithm.
-        n_init : int
-            Number of re-initializations per split.
-        use_wcss_per_cluster : bool
-            Whether to prioritize candidates by per-cluster WCSS.
-        """
         super().__init__(seed=seed, n_init=n_init)
         self.use_wcss_per_cluster = use_wcss_per_cluster
 
@@ -546,8 +695,9 @@ class BisectingKMeans(BaseAlgo):
         X: ArrayLike,
         y: ArrayLike,
         target_k: int,
-    ) -> "BisectingKMeans":
-        """Fit refined bisecting k-means.
+    ) -> BisectingKMeans:
+        """
+        Fit refined bisecting k-means.
 
         Parameters
         ----------
@@ -562,11 +712,6 @@ class BisectingKMeans(BaseAlgo):
         -------
         BisectingKMeans
             The fitted algorithm instance.
-
-        Raises
-        ------
-        ValueError
-            If the requested cluster count is infeasible.
         """
         X_array = np.asarray(X)
         y_array = np.asarray(y)
@@ -582,7 +727,18 @@ class BisectingKMeans(BaseAlgo):
 
 
 class BisectingKMeansNoRefine(BaseAlgo):
-    """Common-interface wrapper around non-refined bisecting k-means."""
+    """
+    Common-interface wrapper around non-refined bisecting k-means.
+
+    Parameters
+    ----------
+    seed : int | np.random.Generator
+        Random seed or generator shared by the fitting implementation.
+    n_init : int
+        Number of independent fitting attempts.
+    """
+
+    _hierarchy_roots: dict[object, _BisectingTreeNode]
 
     def __init__(self, seed: int | np.random.Generator, n_init: int) -> None:
         super().__init__(seed=seed, n_init=n_init)
@@ -592,8 +748,22 @@ class BisectingKMeansNoRefine(BaseAlgo):
         self,
         X: ArrayLike,
         y: ArrayLike,
-    ) -> "NDArray":
-        """Assign instances by traversing the fitted bisecting hierarchy."""
+    ) -> NDArray:
+        """
+        Assign instances by traversing the fitted bisecting hierarchy.
+
+        Parameters
+        ----------
+        X : ArrayLike
+            Feature matrix to predict.
+        y : ArrayLike
+            Source label for each input row.
+
+        Returns
+        -------
+        NDArray
+            Predicted leaf cluster identifier for each row.
+        """
         X_array, y_array = self._validate_prediction_input(X, y)
         return _assign_from_hierarchy(X_array, y_array, self._hierarchy_roots)
 
@@ -602,8 +772,9 @@ class BisectingKMeansNoRefine(BaseAlgo):
         X: ArrayLike,
         y: ArrayLike,
         target_k: int,
-    ) -> "BisectingKMeansNoRefine":
-        """Fit non-refined bisecting k-means.
+    ) -> BisectingKMeansNoRefine:
+        """
+        Fit non-refined bisecting k-means.
 
         Parameters
         ----------
@@ -618,11 +789,6 @@ class BisectingKMeansNoRefine(BaseAlgo):
         -------
         BisectingKMeansNoRefine
             The fitted algorithm instance.
-
-        Raises
-        ------
-        ValueError
-            If the requested cluster count is infeasible.
         """
         X_array = np.asarray(X)
         y_array = np.asarray(y)

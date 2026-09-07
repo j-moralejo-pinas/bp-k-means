@@ -8,28 +8,46 @@ from numpy.typing import ArrayLike, NDArray
 
 
 class BaseAlgo(ABC):
-    """Base interface for algorithms that produce cluster labels."""
+    """
+    Base interface for algorithms that produce cluster labels.
+
+    Parameters
+    ----------
+    seed : int | np.random.Generator
+        Random seed or generator shared by the fitting implementation.
+    n_init : int
+        Number of independent fitting attempts.
+
+    Attributes
+    ----------
+    seed : int | np.random.Generator
+        Random seed or generator shared by the fitting implementation.
+    n_init : int
+        Number of independent fitting attempts.
+    labels_ : NDArray | None
+        Cluster label assigned to each training sample after fitting.
+    centroids_ : NDArray | None
+        Fitted cluster centroids when the algorithm exposes them.
+
+    Raises
+    ------
+    ValueError
+        If ``n_init`` is less than one.
+    """
+
+    seed: int | np.random.Generator
+    n_init: int
+    labels_: NDArray | None
+    centroids_: NDArray | None
+    _cluster_ids: NDArray | None
+    _cluster_source_labels: NDArray | None
+    _cluster_sizes: NDArray | None
 
     def __init__(
         self,
         seed: int | np.random.Generator,
         n_init: int = 1,
     ) -> None:
-        """Initialize common algorithm settings.
-
-        Parameters
-        ----------
-        seed : int | np.random.Generator
-            Seed or random generator used by the algorithm.
-        n_init : int, default=1
-            Number of initialization attempts when supported by the algorithm. Algorithms that do
-            not use multiple initializations can rely on the default.
-
-        Raises
-        ------
-        ValueError
-            If ``n_init`` is less than one.
-        """
         if n_init < 1:
             msg = "n_init must be >= 1"
             raise ValueError(msg)
@@ -42,29 +60,12 @@ class BaseAlgo(ABC):
         self._cluster_sizes: NDArray | None = None
 
     @abstractmethod
-    def fit(
+    def fit(  # noqa: D102
         self,
         X: ArrayLike,
         y: ArrayLike,
         target_k: int,
-    ) -> Self:
-        """Fit the algorithm and store its cluster labels.
-
-        Parameters
-        ----------
-        X : ArrayLike
-            Feature matrix with shape ``(n_samples, n_features)``.
-        y : ArrayLike
-            Labels used by constrained algorithms.
-        target_k : int
-            Requested number of clusters.
-
-        Returns
-        -------
-        Self
-            The fitted algorithm instance.
-        """
-        raise NotImplementedError
+    ) -> Self: ...
 
     def fit_predict(
         self,
@@ -72,7 +73,8 @@ class BaseAlgo(ABC):
         y: ArrayLike,
         target_k: int,
     ) -> NDArray:
-        """Fit the algorithm, retain its prediction state, and return its cluster labels.
+        """
+        Fit the algorithm, retain its prediction state, and return its cluster labels.
 
         Parameters
         ----------
@@ -88,6 +90,11 @@ class BaseAlgo(ABC):
         NDArray
             Cluster label for each input row.
 
+        Raises
+        ------
+        RuntimeError
+            If the concrete algorithm does not store labels during fitting.
+
         Notes
         -----
         This calls ``fit`` once and returns the labels stored on the fitted instance. Subsequent
@@ -100,13 +107,11 @@ class BaseAlgo(ABC):
         return fitted.labels_
 
     @abstractmethod
-    def predict(
+    def predict(  # noqa: D102
         self,
         X: ArrayLike,
         y: ArrayLike,
-    ) -> NDArray:
-        """Assign clusters while respecting one label per input instance."""
-        raise NotImplementedError
+    ) -> NDArray: ...
 
     def _set_cluster_result(
         self,
@@ -114,7 +119,23 @@ class BaseAlgo(ABC):
         y: ArrayLike,
         labels: NDArray,
     ) -> Self:
-        """Store labels, centroids, and source-label ownership for a fitted clustering."""
+        """
+        Store labels, centroids, and source-label ownership for a fitted clustering.
+
+        Parameters
+        ----------
+        X : ArrayLike
+            Training feature matrix.
+        y : ArrayLike
+            Source label for each training sample.
+        labels : NDArray
+            Cluster identifier for each row in ``X``.
+
+        Returns
+        -------
+        Self
+            This algorithm instance.
+        """
         X_array = np.asarray(X)
         y_array = np.asarray(y)
         cluster_ids = np.unique(labels)
@@ -127,7 +148,28 @@ class BaseAlgo(ABC):
         X: ArrayLike,
         y: ArrayLike,
     ) -> tuple[NDArray, NDArray]:
-        """Validate prediction inputs."""
+        """
+        Validate prediction inputs.
+
+        Parameters
+        ----------
+        X : ArrayLike
+            Feature matrix to predict.
+        y : ArrayLike
+            Source label for each row of ``X``.
+
+        Returns
+        -------
+        tuple[NDArray, NDArray]
+            Normalized feature and source-label arrays.
+
+        Raises
+        ------
+        RuntimeError
+            If the algorithm has not been fitted.
+        ValueError
+            If the feature count or number of source labels is invalid.
+        """
         if self.centroids_ is None or self._cluster_ids is None:
             msg = "The algorithm must be fitted before calling predict"
             raise RuntimeError(msg)
@@ -144,12 +186,38 @@ class BaseAlgo(ABC):
         return X_array, y_array
 
     def _squared_centroid_distances(self, X: NDArray) -> NDArray:
-        """Calculate squared distances from samples to fitted centroids."""
+        """
+        Calculate squared distances from samples to fitted centroids.
+
+        Parameters
+        ----------
+        X : NDArray
+            Feature matrix with shape ``(n_samples, n_features)``.
+
+        Returns
+        -------
+        NDArray
+            Squared distances with shape ``(n_samples, n_clusters)``.
+        """
         assert self.centroids_ is not None
         return np.sum((X[:, None, :] - self.centroids_[None, :, :]) ** 2, axis=2)
 
     def _predict_nearest_centroid(self, X: ArrayLike, y: ArrayLike) -> NDArray:
-        """Assign samples to their nearest fitted centroid, respecting labels."""
+        """
+        Assign samples to their nearest fitted centroid, respecting labels.
+
+        Parameters
+        ----------
+        X : ArrayLike
+            Feature matrix to predict.
+        y : ArrayLike
+            Source label for each row of ``X``.
+
+        Returns
+        -------
+        NDArray
+            Predicted cluster identifier for every input row.
+        """
         X_array, y_array = self._validate_prediction_input(X, y)
         return self._select_lowest_cost_clusters(self._squared_centroid_distances(X_array), y_array)
 
@@ -158,7 +226,26 @@ class BaseAlgo(ABC):
         costs: NDArray,
         y: NDArray,
     ) -> NDArray:
-        """Select minimum-cost fitted clusters for each source label."""
+        """
+        Select minimum-cost fitted clusters for each source label.
+
+        Parameters
+        ----------
+        costs : NDArray
+            Cost matrix with one row per sample and one column per cluster.
+        y : NDArray
+            Source label for each sample.
+
+        Returns
+        -------
+        NDArray
+            Identifier of the lowest-cost compatible cluster per sample.
+
+        Raises
+        ------
+        ValueError
+            If any source label has no compatible fitted cluster.
+        """
         assert self._cluster_ids is not None
         assert self._cluster_source_labels is not None
         compatible = y[:, None] == self._cluster_source_labels[None, :]
@@ -174,7 +261,28 @@ class BaseAlgo(ABC):
         centroids: NDArray | None = None,
         source_labels: NDArray | None = None,
     ) -> Self:
-        """Store fitted labels and optional centroids."""
+        """
+        Store fitted labels and optional centroids.
+
+        Parameters
+        ----------
+        labels : NDArray
+            Cluster identifier for each training sample.
+        centroids : NDArray | None
+            Centroid matrix for the fitted clusters.
+        source_labels : NDArray | None
+            Source label associated with each cluster.
+
+        Returns
+        -------
+        Self
+            This algorithm instance.
+
+        Notes
+        -----
+        The fitted attributes ``labels_``, ``centroids_``, ``_cluster_ids``,
+        ``_cluster_source_labels``, and ``_cluster_sizes`` are updated in place.
+        """
         self.labels_ = labels
         self.centroids_ = centroids
         self._cluster_ids = np.unique(labels)

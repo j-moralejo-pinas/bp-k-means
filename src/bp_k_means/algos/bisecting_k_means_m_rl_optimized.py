@@ -1,39 +1,64 @@
 """Bisecting k-means variants using the M_RL ranking metric."""
 
+from __future__ import annotations
+
 import heapq
 from typing import TYPE_CHECKING
 
 import numpy as np
-from numpy.typing import ArrayLike
 
 from bp_k_means.algos.base_algo import BaseAlgo
 from bp_k_means.algos.bisecting_tree import _assign_from_hierarchy, _BisectingTreeNode
 from bp_k_means.algos.k_means import kmeans, kmeans_plus_plus_init
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
+    from numpy.typing import ArrayLike, NDArray
 
 MIN_SPLIT_POINTS = 2
 
 
 def bisecting_kmeans_m_rl_by_label_optimized(  # noqa: C901 - candidate orchestration
-    X: "NDArray",
-    y: "NDArray",
+    X: NDArray,
+    y: NDArray,
     target_k: int,
     seed: int | np.random.Generator,
     n_init: int,
-) -> "NDArray":
+) -> NDArray:
     """
     Bisecting K-Means with label constraint and M_RL ranking (Refine Cluster strategy).
 
     In this version (Refine Cluster):
 
-        - We maintain the clustering state for each label.
-        - We calculate the effect of splitting one more cluster for each label.
-        - Since we have the whole label group, we can re-run k-means on the whole group with k+1
+    - We maintain the clustering state for each label.
+    - We calculate the effect of splitting one more cluster for each label.
+    - Since we have the whole label group, we can re-run k-means on the whole group with k+1
       centroids (seeded from previous centroids + split of the worst cluster).
-        - The heap stores the ACTUAL reduction in WCSS for the entire label group
-            if we increment k by 1.
+    - The heap stores the ACTUAL reduction in WCSS for the entire label group
+      if we increment k by 1.
+
+    Parameters
+    ----------
+    X : NDArray
+        Input feature matrix with shape ``(n_samples, n_features)``.
+    y : NDArray
+        Source label for each input row.
+    target_k : int
+        Desired total number of clusters.
+    seed : int | np.random.Generator
+        Random seed or generator used by the split fits.
+    n_init : int
+        Number of candidate fits per split.
+
+    Returns
+    -------
+    NDArray
+        Global cluster identifier for every input row.
+
+    Raises
+    ------
+    ValueError
+        If ``n_init`` is less than one or ``target_k`` is below the number
+        of unique source labels.
     """
     rng = np.random.default_rng(seed)
     X = np.asarray(X)
@@ -106,6 +131,14 @@ def bisecting_kmeans_m_rl_by_label_optimized(  # noqa: C901 - candidate orchestr
         wcss_per_label[lbl_idx] = wcss
 
     def precompute_next_split_refine(lbl_idx: int) -> None:
+        """
+        Cache the best refined split for one source-label group.
+
+        Parameters
+        ----------
+        lbl_idx : int
+            Index of the source-label group to evaluate.
+        """
         pts = points_per_label[lbl_idx]
         current_centroids = centroids_per_label[lbl_idx]
         local_labels = cluster_labels_per_label[lbl_idx]
@@ -223,16 +256,52 @@ def bisecting_kmeans_m_rl_by_label_optimized(  # noqa: C901 - candidate orchestr
 
 
 class ClusterNode:
-    """Store one active cluster and its best cached split."""
+    """
+    Store one active cluster and its best cached split.
+
+    Parameters
+    ----------
+    cluster_id : int
+        Identifier of the active cluster.
+    lbl_idx : int
+        Index of the source-label group containing the cluster.
+    indices : NDArray
+        Boolean mask selecting the cluster within its source-label group.
+    centroid : NDArray
+        Cluster centroid.
+    wcss : float
+        Current within-cluster sum of squares.
+    X2_sum : float
+        Sum of squared point norms in the cluster.
+
+    Attributes
+    ----------
+    cluster_id : int
+        Identifier of the active cluster.
+    lbl_idx : int
+        Index of the source-label group containing the cluster.
+    indices : NDArray
+        Boolean mask selecting the cluster within its source-label group.
+    centroid : NDArray
+        Cluster centroid.
+    wcss : float
+        Current within-cluster sum of squares.
+    X2_sum : float
+        Sum of squared point norms in the cluster.
+    split_info : tuple[NDArray, NDArray, NDArray, NDArray] | None
+        Cached split labels, centroids, WCSS values, and counts.
+    tree_node : _BisectingTreeNode
+        Corresponding prediction-tree node.
+    """
 
     cluster_id: int
     lbl_idx: int
-    indices: "NDArray"  # boolean mask relative to label group
-    centroid: "NDArray"
+    indices: NDArray  # boolean mask relative to label group
+    centroid: NDArray
     wcss: float
     X2_sum: float
 
-    split_info: tuple["NDArray", "NDArray", "NDArray", "NDArray"] | None = (
+    split_info: tuple[NDArray, NDArray, NDArray, NDArray] | None = (
         None  # labels, centroids, wcss_pair, counts
     )
     tree_node: _BisectingTreeNode
@@ -241,8 +310,8 @@ class ClusterNode:
         self,
         cluster_id: int,
         lbl_idx: int,
-        indices: "NDArray",
-        centroid: "NDArray",
+        indices: NDArray,
+        centroid: NDArray,
         wcss: float,
         X2_sum: float,
     ) -> None:
@@ -257,21 +326,48 @@ class ClusterNode:
 
 
 def _fit_bisecting_kmeans_m_rl_by_label_optimized_no_refine(  # noqa: C901, PLR0912
-    X: "NDArray",
-    y: "NDArray",
+    X: NDArray,
+    y: NDArray,
     target_k: int,
     seed: int | np.random.Generator,
     n_init: int,
-) -> tuple["NDArray", dict[object, _BisectingTreeNode]]:
+) -> tuple[NDArray, dict[object, _BisectingTreeNode]]:
     """
     Bisecting K-Means with label constraint and M_RL ranking (No Refine strategy).
 
     In this version (No Refine):
+
     - We treat every cluster as an independent candidate for splitting.
     - We precompute the split of *every* current cluster into 2 sub-clusters.
     - The heap stores the ACTUAL reduction for that specific cluster split.
     - When a split is accepted, the chosen cluster is replaced by 2 new clusters.
     - We must then precompute the potential splits for these 2 new clusters.
+
+    Parameters
+    ----------
+    X : NDArray
+        Input feature matrix.
+    y : NDArray
+        Source label for each input row.
+    target_k : int
+        Desired total number of clusters.
+    seed : int | np.random.Generator
+        Random seed or generator used by the split fits.
+    n_init : int
+        Number of candidate fits per split.
+
+    Returns
+    -------
+    labels : NDArray
+        Global cluster identifier for every input row.
+    roots : dict[object, _BisectingTreeNode]
+        Fitted hierarchy root indexed by original source label.
+
+    Raises
+    ------
+    ValueError
+        If ``n_init`` is less than one or ``target_k`` is below the number
+        of unique source labels.
     """
     rng = np.random.default_rng(seed)
     X = np.asarray(X)
@@ -318,6 +414,14 @@ def _fit_bisecting_kmeans_m_rl_by_label_optimized_no_refine(  # noqa: C901, PLR0
     current_total_clusters = 0
 
     def compute_split_candidate(node: ClusterNode) -> None:
+        """
+        Compute and cache the best two-way split for an active node.
+
+        Parameters
+        ----------
+        node : ClusterNode
+            Active cluster whose split candidate is computed.
+        """
         pts = points_per_label[node.lbl_idx]
         X2 = X2_per_label_list[node.lbl_idx]
 
@@ -499,13 +603,33 @@ def _fit_bisecting_kmeans_m_rl_by_label_optimized_no_refine(  # noqa: C901, PLR0
 
 
 def bisecting_kmeans_m_rl_by_label_optimized_no_refine(
-    X: "NDArray",
-    y: "NDArray",
+    X: NDArray,
+    y: NDArray,
     target_k: int,
     seed: int | np.random.Generator,
     n_init: int,
-) -> "NDArray":
-    """Run non-refined M_RL bisecting k-means and return its fitted labels."""
+) -> NDArray:
+    """
+    Run non-refined M_RL bisecting k-means and return its fitted labels.
+
+    Parameters
+    ----------
+    X : NDArray
+        Input feature matrix.
+    y : NDArray
+        Source label for each input row.
+    target_k : int
+        Desired total number of clusters.
+    seed : int | np.random.Generator
+        Random seed or generator used by the split fits.
+    n_init : int
+        Number of candidate fits per split.
+
+    Returns
+    -------
+    NDArray
+        Global cluster identifier for every input row.
+    """
     labels, _ = _fit_bisecting_kmeans_m_rl_by_label_optimized_no_refine(
         X, y, target_k, seed, n_init
     )
@@ -513,14 +637,40 @@ def bisecting_kmeans_m_rl_by_label_optimized_no_refine(
 
 
 class BisectingKMeansMRL(BaseAlgo):
-    """Common-interface wrapper around refined M_RL bisecting k-means."""
+    """
+    Common-interface wrapper around refined M_RL bisecting k-means.
+
+    Attributes
+    ----------
+    labels_ : NDArray | None
+        Labels produced by the last fit.
+    centroids_ : NDArray | None
+        Centroids produced by the last fit.
+    """
+
+    labels_: NDArray | None
+    centroids_: NDArray | None
 
     def predict(
         self,
         X: ArrayLike,
         y: ArrayLike,
-    ) -> "NDArray":
-        """Assign instances to the refined M_RL bisecting leaf centroids."""
+    ) -> NDArray:
+        """
+        Assign instances to the refined M_RL bisecting leaf centroids.
+
+        Parameters
+        ----------
+        X : ArrayLike
+            Feature matrix to predict.
+        y : ArrayLike
+            Source label for each input row.
+
+        Returns
+        -------
+        NDArray
+            Predicted cluster identifier for each row.
+        """
         return self._predict_nearest_centroid(X, y)
 
     def fit(
@@ -528,8 +678,9 @@ class BisectingKMeansMRL(BaseAlgo):
         X: ArrayLike,
         y: ArrayLike,
         target_k: int,
-    ) -> "BisectingKMeansMRL":
-        """Fit refined M_RL bisecting k-means.
+    ) -> BisectingKMeansMRL:
+        """
+        Fit refined M_RL bisecting k-means.
 
         Parameters
         ----------
@@ -544,11 +695,6 @@ class BisectingKMeansMRL(BaseAlgo):
         -------
         BisectingKMeansMRL
             The fitted algorithm instance.
-
-        Raises
-        ------
-        ValueError
-            If the requested cluster count is infeasible.
         """
         X_array = np.asarray(X)
         y_array = np.asarray(y)
@@ -563,7 +709,18 @@ class BisectingKMeansMRL(BaseAlgo):
 
 
 class BisectingKMeansMRLNoRefine(BaseAlgo):
-    """Common-interface wrapper around non-refined M_RL bisecting k-means."""
+    """
+    Common-interface wrapper around non-refined M_RL bisecting k-means.
+
+    Parameters
+    ----------
+    seed : int | np.random.Generator
+        Random seed or generator shared by the fitting implementation.
+    n_init : int
+        Number of independent fitting attempts.
+    """
+
+    _hierarchy_roots: dict[object, _BisectingTreeNode]
 
     def __init__(self, seed: int | np.random.Generator, n_init: int) -> None:
         super().__init__(seed=seed, n_init=n_init)
@@ -573,8 +730,22 @@ class BisectingKMeansMRLNoRefine(BaseAlgo):
         self,
         X: ArrayLike,
         y: ArrayLike,
-    ) -> "NDArray":
-        """Assign instances by traversing the fitted M_RL bisecting hierarchy."""
+    ) -> NDArray:
+        """
+        Assign instances by traversing the fitted M_RL bisecting hierarchy.
+
+        Parameters
+        ----------
+        X : ArrayLike
+            Feature matrix to predict.
+        y : ArrayLike
+            Source label for each input row.
+
+        Returns
+        -------
+        NDArray
+            Predicted leaf cluster identifier for each row.
+        """
         X_array, y_array = self._validate_prediction_input(X, y)
         return _assign_from_hierarchy(X_array, y_array, self._hierarchy_roots)
 
@@ -583,8 +754,9 @@ class BisectingKMeansMRLNoRefine(BaseAlgo):
         X: ArrayLike,
         y: ArrayLike,
         target_k: int,
-    ) -> "BisectingKMeansMRLNoRefine":
-        """Fit non-refined M_RL bisecting k-means.
+    ) -> BisectingKMeansMRLNoRefine:
+        """
+        Fit non-refined M_RL bisecting k-means.
 
         Parameters
         ----------
@@ -599,11 +771,6 @@ class BisectingKMeansMRLNoRefine(BaseAlgo):
         -------
         BisectingKMeansMRLNoRefine
             The fitted algorithm instance.
-
-        Raises
-        ------
-        ValueError
-            If the requested cluster count is infeasible.
         """
         X_array = np.asarray(X)
         y_array = np.asarray(y)

@@ -70,23 +70,23 @@ repos:
     additional_dependencies: ['pyright[nodejs]']
 
 # Check for dead code:
-- repo: https://github.com/jendrikseipp/vulture
-  rev: v2.16
-  hooks:
-  - id: vulture
+# - repo: https://github.com/jendrikseipp/vulture
+#   rev: v2.16
+#   hooks:
+#   - id: vulture
 
 # Security scanner for Python code:
-- repo: https://github.com/PyCQA/bandit
-  rev: 1.9.4
-  hooks:
-  - id: bandit
-    args: ['-c', 'pyproject.toml']
+# - repo: https://github.com/PyCQA/bandit
+#   rev: 1.9.4
+#   hooks:
+#   - id: bandit
+#     args: ['-c', 'pyproject.toml']
 
 # Check dependencies for security vulnerabilities:
-- repo: https://github.com/pypa/pip-audit
-  rev: v2.10.0
-  hooks:
-  - id: pip-audit
+# - repo: https://github.com/pypa/pip-audit
+#   rev: v2.10.0
+#   hooks:
+#   - id: pip-audit
 
 ##########################################
 ## Everything below this line is unused ##

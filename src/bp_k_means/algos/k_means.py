@@ -10,7 +10,31 @@ def kmeans_plus_plus_init(
     seed: int | np.random.Generator,
     existing_centroids: NDArray | None = None,
 ) -> NDArray:
-    """Initialize centroids with the k-means++ strategy."""
+    """
+    Initialize centroids with the k-means++ strategy.
+
+    Parameters
+    ----------
+    X : NDArray
+        Input points with shape ``(n_samples, n_features)``.
+    k : int
+        Number of centroids to create.
+    seed : int | np.random.Generator
+        Random seed or generator used for sampling.
+    existing_centroids : NDArray | None
+        Previously selected centroids to preserve and use for distance weighting.
+
+    Returns
+    -------
+    NDArray
+        Centroids with shape ``(k, n_features)``. Every newly selected centroid
+        is one of the input rows.
+
+    Raises
+    ------
+    ValueError
+        If ``existing_centroids`` contains more than ``k`` rows.
+    """
     rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
     n, d = X.shape
     centroids = np.empty((k, d))
@@ -71,6 +95,24 @@ def subsampled_kmeans_plus_plus_init(
     Selects `subsample_size` points uniformly without replacement, then runs standard k-means++ on
     that subset.  All centroids are drawn from the subsample, keeping complexity O(k *
     subsample_size) instead of O(k * n).
+
+    Parameters
+    ----------
+    X : NDArray
+        Input points with shape ``(n_samples, n_features)``.
+    k : int
+        Number of centroids to create.
+    subsample_size : int
+        Maximum number of points sampled before initialization.
+    seed : int | np.random.Generator
+        Random seed or generator used for sampling.
+    existing_centroids : NDArray | None
+        Previously selected centroids to preserve.
+
+    Returns
+    -------
+    NDArray
+        Initialized centroids with shape ``(k, n_features)``.
     """
     rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
     n = X.shape[0]
@@ -92,6 +134,27 @@ def random_init(
 
     If `existing_centroids` is provided, only the remaining slots are filled with new random points,
     and no new centroid will duplicate an existing one.
+
+    Parameters
+    ----------
+    X : NDArray
+        Input points with shape ``(n_samples, n_features)``.
+    k : int
+        Number of centroids to create.
+    seed : int | np.random.Generator
+        Random seed or generator used for sampling.
+    existing_centroids : NDArray | None
+        Previously selected centroids to preserve.
+
+    Returns
+    -------
+    NDArray
+        Initialized centroids with shape ``(k, n_features)``.
+
+    Raises
+    ------
+    ValueError
+        If ``existing_centroids`` contains more than ``k`` rows.
     """
     rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
     n, d = X.shape
@@ -131,7 +194,37 @@ def kmeans(
     init_centroids: NDArray | None = None,
     X2: NDArray | None = None,
 ) -> tuple[NDArray, NDArray]:
-    """Run Lloyd's k-means algorithm and return labels and centroids."""
+    """
+    Run Lloyd's k-means algorithm and return labels and centroids.
+
+    Parameters
+    ----------
+    X : NDArray
+        Input points with shape ``(n_samples, n_features)``.
+    k : int
+        Number of clusters.
+    max_iter : int
+        Maximum number of assignment/update iterations.
+    seed : int | np.random.Generator
+        Random seed or generator used when initialization is required.
+    init_centroids : NDArray | None
+        Initial centroids with shape ``(k, n_features)``. If omitted,
+        k-means++ initialization is used.
+    X2 : NDArray | None
+        Precomputed squared row norms of ``X``.
+
+    Returns
+    -------
+    labels : NDArray
+        Cluster identifier for each input row.
+    centroids : NDArray
+        Final centroid matrix with shape ``(k, n_features)``.
+
+    Raises
+    ------
+    ValueError
+        If ``init_centroids`` does not contain exactly ``k`` centroids.
+    """
     rng = np.random.default_rng(seed) if isinstance(seed, int) else seed
     n, d = X.shape
 

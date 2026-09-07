@@ -4,12 +4,13 @@ Unified BP-KMeans: greedy label-constrained clustering.
 The module exposes configurable label-selection metrics and initialization strategies.
 """
 
+from __future__ import annotations
+
 import heapq
 from enum import Enum
 from typing import TYPE_CHECKING
 
 import numpy as np
-from numpy.typing import ArrayLike
 
 from bp_k_means.algos.base_algo import BaseAlgo
 from bp_k_means.algos.k_means import (
@@ -21,7 +22,7 @@ from bp_k_means.algos.k_means import (
 from bp_k_means.utils.logging import logger
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
+    from numpy.typing import ArrayLike, NDArray
 
 
 class RankingMetric(Enum):
@@ -32,6 +33,17 @@ class RankingMetric(Enum):
     M_C:   Maximum single-cluster WCSS within the label.
     M_ERL: Estimated WCSS reduction (label-level), scaled by k_y / (k_y + 1).
     M_RL:  Exact WCSS reduction via precomputed trial split.
+
+    Attributes
+    ----------
+    M_L
+        Enumeration value identifying total label WCSS.
+    M_C
+        Enumeration value identifying maximum cluster WCSS.
+    M_ERL
+        Enumeration value identifying estimated WCSS reduction.
+    M_RL
+        Enumeration value identifying exact WCSS reduction.
     """
 
     M_L = 1
@@ -48,6 +60,17 @@ class InitStrategy(Enum):
     I_ACL: Keep existing centroids, add one new.
     I_CRI: Replace highest-WCSS cluster centroid with two new centroids.
     I_ACC: Keep highest-WCSS cluster centroid, add one new within it.
+
+    Attributes
+    ----------
+    I_LRI
+        Enumeration value identifying full centroid reinitialization.
+    I_ACL
+        Enumeration value identifying existing-centroid preservation with one addition.
+    I_CRI
+        Enumeration value identifying replacement of the highest-WCSS centroid.
+    I_ACC
+        Enumeration value identifying preservation of the highest-WCSS centroid with one addition.
     """
 
     I_LRI = 1
@@ -63,6 +86,15 @@ class InitAlgorithm(Enum):
     KMEANS_PLUS_PLUS: Standard k-means++ initialization.
     SUBSAMPLING_KMEANS_PLUS_PLUS: k-means++ initialization on a random subsample of the data.
     RANDOM_SAMPLING: Randomly sample k points from the data as centroids.
+
+    Attributes
+    ----------
+    KMEANS_PLUS_PLUS
+        Enumeration value identifying standard k-means++ initialization.
+    SUBSAMPLING_KMEANS_PLUS_PLUS
+        Enumeration value identifying subsampled k-means++ initialization.
+    RANDOM_SAMPLING
+        Enumeration value identifying random point sampling initialization.
     """
 
     KMEANS_PLUS_PLUS = 1
@@ -70,10 +102,26 @@ class InitAlgorithm(Enum):
     RANDOM_SAMPLING = 3
 
 
-def _wcss_per_cluster(
-    local_labels: "NDArray", X2: "NDArray", centroids: "NDArray", k: int
-) -> "NDArray":
-    """WCSS per cluster: sum(||x||^2 for x in c) - n_c * ||mu_c||^2."""
+def _wcss_per_cluster(local_labels: NDArray, X2: NDArray, centroids: NDArray, k: int) -> NDArray:
+    """
+    Compute within-cluster sum of squares for every local cluster.
+
+    Parameters
+    ----------
+    local_labels : NDArray
+        Local cluster identifier for each point.
+    X2 : NDArray
+        Squared norm of each point.
+    centroids : NDArray
+        Centroid matrix indexed by local cluster identifier.
+    k : int
+        Number of local clusters.
+
+    Returns
+    -------
+    NDArray
+        WCSS value for each cluster, including empty cluster slots.
+    """
     return np.bincount(local_labels, weights=X2, minlength=k) - np.bincount(
         local_labels, minlength=k
     ) * np.einsum("ij,ij->i", centroids, centroids)
@@ -82,13 +130,42 @@ def _wcss_per_cluster(
 def _compute_metric(
     ranking_metric: RankingMetric,
     wcss_total: float,
-    local_labels: "NDArray",
-    X2: "NDArray",
-    centroids: "NDArray",
+    local_labels: NDArray,
+    X2: NDArray,
+    centroids: NDArray,
     k_y: int,
     n_y: int,
 ) -> float:
-    """Compute the label-selection metric score."""
+    """
+    Compute the label-selection metric score.
+
+    Parameters
+    ----------
+    ranking_metric : RankingMetric
+        Formula used to rank the source label.
+    wcss_total : float
+        Total WCSS for the source label.
+    local_labels : NDArray
+        Current local cluster labels.
+    X2 : NDArray
+        Squared point norms.
+    centroids : NDArray
+        Current local centroids.
+    k_y : int
+        Current number of clusters for the source label.
+    n_y : int
+        Number of points with the source label.
+
+    Returns
+    -------
+    float
+        Ranking score; larger values are selected first.
+
+    Raises
+    ------
+    ValueError
+        If ``ranking_metric`` is unsupported by this helper.
+    """
     if ranking_metric == RankingMetric.M_L:
         score = wcss_total
     elif ranking_metric == RankingMetric.M_C:
@@ -103,18 +180,53 @@ def _compute_metric(
 
 def _build_init_centroids(
     strategy: InitStrategy,
-    pts: "NDArray",
-    current_centroids: "NDArray",
+    pts: NDArray,
+    current_centroids: NDArray,
     curr_k: int,
     new_k: int,
     rng: np.random.Generator,
-    target_pts: "NDArray | None" = None,
-    max_wcss_idx: "int | None" = None,
+    target_pts: NDArray | None = None,
+    max_wcss_idx: int | None = None,
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
     *,
     subsample_size: int,
-) -> "NDArray":
-    """Build initial centroids for a k-means run with new_k clusters."""
+) -> NDArray:
+    """
+    Build initial centroids for a k-means run with ``new_k`` clusters.
+
+    Parameters
+    ----------
+    strategy : InitStrategy
+        Centroid expansion strategy.
+    pts : NDArray
+        Points belonging to the source label.
+    current_centroids : NDArray
+        Centroids for the current clustering.
+    curr_k : int
+        Current number of clusters.
+    new_k : int
+        Requested number of clusters.
+    rng : np.random.Generator
+        Random generator passed to the initializer.
+    target_pts : NDArray | None
+        Points in the cluster selected by a cluster-level strategy.
+    max_wcss_idx : int | None
+        Index of the highest-WCSS current cluster.
+    init_algorithm : InitAlgorithm
+        Initializer used for newly created centroids.
+    subsample_size : int
+        Maximum subsample size for subsampled k-means++.
+
+    Returns
+    -------
+    NDArray
+        Initial centroid matrix with shape ``(new_k, n_features)``.
+
+    Raises
+    ------
+    ValueError
+        If the selected strategy is unsupported or there are too few points.
+    """
     dim = pts.shape[1]
 
     if strategy in (InitStrategy.I_LRI, InitStrategy.I_ACL):
@@ -170,13 +282,40 @@ def _build_init_centroids(
 
 def _call_init_algorithm(
     init_algorithm: InitAlgorithm,
-    pts: "NDArray",
+    pts: NDArray,
     k: int,
     rng: np.random.Generator,
     subsample_size: int,
-    existing_centroids: "NDArray | None",
-) -> "NDArray":
-    """Dispatch to the appropriate centroid initialisation function."""
+    existing_centroids: NDArray | None,
+) -> NDArray:
+    """
+    Dispatch to the appropriate centroid initialization function.
+
+    Parameters
+    ----------
+    init_algorithm : InitAlgorithm
+        Initializer to call.
+    pts : NDArray
+        Points from which centroids are selected.
+    k : int
+        Number of centroids to select.
+    rng : np.random.Generator
+        Random generator used by the initializer.
+    subsample_size : int
+        Maximum subsample size for subsampled k-means++.
+    existing_centroids : NDArray | None
+        Centroids that the initializer must preserve.
+
+    Returns
+    -------
+    NDArray
+        Initialized centroid matrix.
+
+    Raises
+    ------
+    ValueError
+        If ``init_algorithm`` is unsupported.
+    """
     if init_algorithm == InitAlgorithm.KMEANS_PLUS_PLUS:
         return kmeans_plus_plus_init(pts, k, rng, existing_centroids=existing_centroids)
     if init_algorithm == InitAlgorithm.SUBSAMPLING_KMEANS_PLUS_PLUS:
@@ -190,11 +329,11 @@ def _call_init_algorithm(
 
 
 def _run_split(
-    pts: "NDArray",
-    X2: "NDArray",
+    pts: NDArray,
+    X2: NDArray,
     sum_X2: float,
-    local_labels: "NDArray",
-    current_centroids: "NDArray",
+    local_labels: NDArray,
+    current_centroids: NDArray,
     curr_k: int,
     new_k: int,
     n_init: int,
@@ -203,11 +342,47 @@ def _run_split(
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
     *,
     subsample_size: int,
-) -> "tuple[float, NDArray, NDArray]":
+) -> tuple[float, NDArray, NDArray]:
     """
     Run n_init k-means attempts with new_k clusters.
 
     Returns (best_wcss, best_labels, best_centroids).
+
+    Parameters
+    ----------
+    pts : NDArray
+        Points for one source label.
+    X2 : NDArray
+        Squared norm of each point in ``pts``.
+    sum_X2 : float
+        Sum of ``X2``.
+    local_labels : NDArray
+        Current local cluster labels.
+    current_centroids : NDArray
+        Current local centroids.
+    curr_k : int
+        Current number of clusters.
+    new_k : int
+        Requested number of clusters.
+    n_init : int
+        Number of independent k-means attempts.
+    rng : np.random.Generator
+        Random generator used for initialization and k-means.
+    init_strategy : InitStrategy
+        Strategy used to seed the new run.
+    init_algorithm : InitAlgorithm
+        Centroid initialization algorithm.
+    subsample_size : int
+        Maximum subsample size for subsampled k-means++.
+
+    Returns
+    -------
+    best_wcss : float
+        Lowest WCSS found across attempts.
+    best_labels : NDArray
+        Local labels for the best attempt.
+    best_centroids : NDArray
+        Centroids for the best attempt.
     """
     target_pts = None
     max_wcss_idx = None
@@ -246,8 +421,8 @@ def _run_split(
 
 
 def bp_kmeans(
-    X: "NDArray",
-    y: "NDArray",
+    X: NDArray,
+    y: NDArray,
     target_k: int,
     *,
     seed: int | np.random.Generator,
@@ -256,7 +431,7 @@ def bp_kmeans(
     ranking_metric: RankingMetric = RankingMetric.M_ERL,
     init_strategy: InitStrategy = InitStrategy.I_CRI,
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
-) -> "NDArray":
+) -> NDArray:
     """
     BP-KMeans: greedy label-constrained clustering.
 
@@ -275,20 +450,20 @@ def bp_kmeans(
         Random seed.
     n_init : int
         Number of k-means restarts per split.
+    subsample_size : int
+        Number of points used when ``init_algorithm`` is
+        ``InitAlgorithm.SUBSAMPLING_KMEANS_PLUS_PLUS``.
     ranking_metric : RankingMetric
         Ranking metric used for label selection.
     init_strategy : InitStrategy
         Centroid expansion strategy.
     init_algorithm : InitAlgorithm
         Centroid initialisation algorithm (k-means++, subsampled k-means++, or random).
-    subsample_size : int
-        Number of points used when ``init_algorithm`` is
-        ``InitAlgorithm.SUBSAMPLING_KMEANS_PLUS_PLUS``.
 
     Returns
     -------
     labels : NDArray
-        Cluster assignments in [0, target_k).
+        NDArray
 
     Raises
     ------
@@ -448,12 +623,12 @@ def _bp_kmeans_precomputed(
     n_init: int,
     rng: np.random.Generator,
     init_strategy: InitStrategy,
-    points_per_label: dict[int, "NDArray"],
-    indices_per_label: dict[int, "NDArray"],
-    centroids_per_label: dict[int, "NDArray"],
-    cluster_labels_per_label: dict[int, "NDArray"],
+    points_per_label: dict[int, NDArray],
+    indices_per_label: dict[int, NDArray],
+    centroids_per_label: dict[int, NDArray],
+    cluster_labels_per_label: dict[int, NDArray],
     wcss_per_label: dict[int, float],
-    X2_per_label: dict[int, "NDArray"],
+    X2_per_label: dict[int, NDArray],
     sum_X2_per_label: dict[int, float],
     global_clusters_per_label: dict[int, list[int]],
     current_cluster_id: int,
@@ -461,12 +636,64 @@ def _bp_kmeans_precomputed(
     init_algorithm: InitAlgorithm = InitAlgorithm.KMEANS_PLUS_PLUS,
     *,
     subsample_size: int,
-) -> "NDArray":
-    """M_RL variant: precompute trial splits to rank by exact WCSS reduction."""
+) -> NDArray:
+    """
+    Run BP-KMeans using exact precomputed WCSS reductions.
+
+    Parameters
+    ----------
+    labels : list[int]
+        Source-label identifiers.
+    target_k : int
+        Desired total number of clusters.
+    n_init : int
+        Number of k-means attempts per trial split.
+    rng : np.random.Generator
+        Random generator used by trial fits.
+    init_strategy : InitStrategy
+        Strategy used to initialize each trial split.
+    points_per_label : dict[int, NDArray]
+        Points for each source label.
+    indices_per_label : dict[int, NDArray]
+        Original indices for each source label.
+    centroids_per_label : dict[int, NDArray]
+        Mutable current centroids per source label.
+    cluster_labels_per_label : dict[int, NDArray]
+        Mutable local cluster labels per source label.
+    wcss_per_label : dict[int, float]
+        Current WCSS per source label.
+    X2_per_label : dict[int, NDArray]
+        Squared norms for points grouped by source label.
+    sum_X2_per_label : dict[int, float]
+        Squared-norm total per source label.
+    global_clusters_per_label : dict[int, list[int]]
+        Mutable mapping from local clusters to global identifiers.
+    current_cluster_id : int
+        Next global cluster identifier.
+    n_samples : int
+        Number of input samples.
+    init_algorithm : InitAlgorithm
+        Centroid initialization algorithm.
+    subsample_size : int
+        Maximum subsample size for subsampled k-means++.
+
+    Returns
+    -------
+    NDArray
+        Global cluster identifier for every input sample.
+    """
     pending_splits: dict[int, tuple[float, NDArray, NDArray]] = {}
     heap: list[tuple[float, int]] = []
 
     def precompute_next_split(label: int) -> None:
+        """
+        Cache the best next split and its exact WCSS reduction.
+
+        Parameters
+        ----------
+        label : int
+            Source-label identifier whose next split is evaluated.
+        """
         pts = points_per_label[label]
         current_centroids = centroids_per_label[label]
         curr_k = current_centroids.shape[0]
@@ -533,14 +760,61 @@ def _bp_kmeans_precomputed(
 
 
 class BPKMeans(BaseAlgo):
-    """Common-interface wrapper around the boundary-preserving algorithm."""
+    """
+    Common-interface wrapper around the boundary-preserving algorithm.
+
+    Parameters
+    ----------
+    ranking_metric : RankingMetric
+        Metric used to choose the next source label to split.
+    init_strategy : InitStrategy
+        Strategy used to seed each expanded clustering.
+    init_algorithm : InitAlgorithm
+        Algorithm used to create new centroids.
+    subsample_size : int
+        Maximum sample size used by subsampled k-means++.
+    seed : int | np.random.Generator
+        Random seed or generator shared by the fitting implementation.
+    n_init : int
+        Number of independent fitting attempts.
+
+    Attributes
+    ----------
+    ranking_metric : RankingMetric
+        Metric used to choose the next source label to split.
+    init_strategy : InitStrategy
+        Strategy used to seed each expanded clustering.
+    init_algorithm : InitAlgorithm
+        Algorithm used to create new centroids.
+    subsample_size : int
+        Maximum sample size used by subsampled k-means++.
+    """
+
+    ranking_metric: RankingMetric
+    init_strategy: InitStrategy
+    init_algorithm: InitAlgorithm
+    subsample_size: int
 
     def predict(
         self,
         X: ArrayLike,
         y: ArrayLike,
-    ) -> "NDArray":
-        """Assign instances to BP-KMeans centroids selected for their source label."""
+    ) -> NDArray:
+        """
+        Assign instances to BP-KMeans centroids selected for their source label.
+
+        Parameters
+        ----------
+        X : ArrayLike
+            Feature matrix to predict.
+        y : ArrayLike
+            Source label for each input row.
+
+        Returns
+        -------
+        NDArray
+            Predicted cluster identifier for each input row.
+        """
         return self._predict_nearest_centroid(X, y)
 
     def __init__(
@@ -553,23 +827,6 @@ class BPKMeans(BaseAlgo):
         seed: int | np.random.Generator,
         n_init: int,
     ) -> None:
-        """Initialize a BP-KMeans algorithm.
-
-        Parameters
-        ----------
-        ranking_metric : RankingMetric
-            Ranking metric used to select the next label to split.
-        init_strategy : InitStrategy
-            Strategy used to initialize each split.
-        init_algorithm : InitAlgorithm
-            Centroid initialization algorithm.
-        subsample_size : int
-            Subsample size for subsampled k-means++ initialization.
-        seed : int | np.random.Generator
-            Seed or random generator used by the algorithm.
-        n_init : int
-            Number of k-means restarts per split.
-        """
         super().__init__(seed=seed, n_init=n_init)
         self.ranking_metric = ranking_metric
         self.init_strategy = init_strategy
@@ -581,8 +838,9 @@ class BPKMeans(BaseAlgo):
         X: ArrayLike,
         y: ArrayLike,
         target_k: int,
-    ) -> "BPKMeans":
-        """Fit BP-KMeans and store the resulting cluster labels.
+    ) -> BPKMeans:
+        """
+        Fit BP-KMeans and store the resulting cluster labels.
 
         Parameters
         ----------
@@ -598,10 +856,12 @@ class BPKMeans(BaseAlgo):
         BPKMeans
             The fitted algorithm instance.
 
-        Raises
-        ------
-        ValueError
-            If the requested cluster count or initialization is infeasible.
+        Attributes
+        ----------
+        labels_ : NDArray
+            Labels produced by the fitted BP-KMeans run.
+        centroids_ : NDArray
+            Centroids corresponding to the fitted clusters.
         """
         X_array = np.asarray(X)
         y_array = np.asarray(y)

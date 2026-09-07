@@ -45,13 +45,27 @@ LEVEL_PRIORITY = ["CUSEC", "CUMUN", "CMUN", "CPRO", "CCA"]
 
 
 def ensure_dirs() -> None:
-    """Create the local directories used for downloaded and generated data."""
+    """
+    Create the local directories used for downloaded and generated data.
+
+    Notes
+    -----
+    The directories are defined by the module-level ``DATA_DIR`` and
+    ``OUTPUT_DIR`` constants.
+    """
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def download_seccionado_zip() -> Path:
-    """Download seccionado_2025.zip from INE if it is not already present."""
+    """
+    Download ``seccionado_2025.zip`` from INE if it is not already present.
+
+    Returns
+    -------
+    Path
+        Local path to the downloaded archive.
+    """
     ensure_dirs()
     zip_path = DATA_DIR / "seccionado_2025.zip"
 
@@ -70,7 +84,19 @@ def download_seccionado_zip() -> Path:
 
 
 def extract_seccionado_zip(zip_path: Path) -> Path:
-    """Extract seccionado_2025.zip into data directory if not already extracted."""
+    """
+    Extract ``seccionado_2025.zip`` if it is not already extracted.
+
+    Parameters
+    ----------
+    zip_path : Path
+        Source archive.
+
+    Returns
+    -------
+    Path
+        Directory containing extracted files.
+    """
     extract_dir = DATA_DIR / "extracted"
     if extract_dir.exists():
         return extract_dir
@@ -84,7 +110,24 @@ def extract_seccionado_zip(zip_path: Path) -> Path:
 
 
 def find_seccionado_shapefile(extract_dir: Path) -> Path:
-    """Find the SECC_CE_20250101.shp shapefile inside the extracted tree."""
+    """
+    Find the census-section shapefile inside an extracted tree.
+
+    Parameters
+    ----------
+    extract_dir : Path
+        Directory searched recursively.
+
+    Returns
+    -------
+    Path
+        Matching ``SECC_CE_20250101.shp`` path.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the expected shapefile is absent.
+    """
     for shp in extract_dir.rglob("*.shp"):
         if "SECC_CE_20250101" in shp.name:
             return shp
@@ -97,6 +140,11 @@ def load_seccionado_gdf() -> gpd.GeoDataFrame:
     Ensure seccionado_2025 is downloaded and extracted.
 
     The extracted SECC_CE_20250101 shapefile is loaded into a GeoDataFrame in TARGET_CRS.
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Census sections reprojected to ``TARGET_CRS``.
     """
     zip_path = download_seccionado_zip()
     extract_dir = extract_seccionado_zip(zip_path)
@@ -115,7 +163,14 @@ def load_seccionado_gdf() -> gpd.GeoDataFrame:
 
 
 def download_population_csv() -> Path:
-    """Download INE population CSV (69213.csv) if it is not already present."""
+    """
+    Download the INE population CSV if it is not already present.
+
+    Returns
+    -------
+    Path
+        Local path to ``69213.csv``.
+    """
     ensure_dirs()
     csv_path = DATA_DIR / "69213.csv"
 
@@ -134,7 +189,19 @@ def download_population_csv() -> Path:
 
 
 def normalize_filter_values(allowed: object) -> set[str]:
-    """Normalise filter values to a set of strings."""
+    """
+    Normalize filter values to a set[str].
+
+    Parameters
+    ----------
+    allowed : object
+        Scalar value or iterable of values accepted by a geographic filter.
+
+    Returns
+    -------
+    set[str]
+        String-normalized allowed values.
+    """
     if isinstance(allowed, (list, tuple, set)):
         return {str(v) for v in allowed}
     return {str(allowed)}
@@ -150,6 +217,24 @@ def filter_sections_by_codes(
     Filters are applied from most to least restrictive according to LEVEL_PRIORITY.
 
     Example: {"CPRO": "28", "CMUN": "079"} for Madrid municipality.
+
+    Parameters
+    ----------
+    secc : gpd.GeoDataFrame
+        Census-section rows.
+    filter_by_codes : dict | None
+        Column-to-allowed-value mapping. ``None`` or an empty mapping returns
+        the input unchanged.
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Copy containing sections matching every requested filter.
+
+    Raises
+    ------
+    KeyError
+        If a requested filter column is absent.
     """
     if not filter_by_codes:
         return secc
@@ -182,6 +267,20 @@ def clip_sections_to_nodes_bbox(
     Bounding box clip of secc around the extent of nodes_utm, expanded by margin_m.
 
     Useful when you do not filter by codes.
+
+    Parameters
+    ----------
+    secc : gpd.GeoDataFrame
+        Census sections in the target projected coordinate system.
+    nodes_utm : gpd.GeoDataFrame
+        Projected network nodes defining the bounding box.
+    margin_m : float
+        Distance added to every side of the node extent.
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Sections intersecting the expanded bounding box.
     """
     minx, miny, maxx, maxy = nodes_utm.total_bounds
     minx -= margin_m
@@ -195,7 +294,25 @@ def _split_long_edges(
     nodes_utm: gpd.GeoDataFrame,
     edges_utm: gpd.GeoDataFrame,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, list[dict[str, object]]]:
-    """Split long network edges and return updated nodes, edges, and new edge records."""
+    """
+    Split long network edges and return updated nodes, edges, and new edge records.
+
+    Parameters
+    ----------
+    nodes_utm : gpd.GeoDataFrame
+        Projected network nodes with ``osmid`` values.
+    edges_utm : gpd.GeoDataFrame
+        Projected network edges with ``u``, ``v``, and geometry columns.
+
+    Returns
+    -------
+    nodes_utm : gpd.GeoDataFrame
+        Nodes including inserted intermediate nodes.
+    edges_utm : gpd.GeoDataFrame
+        Edges after removal of replaced long edges.
+    new_edges : list[dict[str, object]]
+        Records for the newly created edge segments.
+    """
     new_edges: list[dict[str, object]] = []
     new_nodes = []
     edges_to_remove = []
@@ -248,7 +365,28 @@ def _prepare_sections(
     nodes_utm: gpd.GeoDataFrame,
     filter_by_codes: dict | None,
 ) -> gpd.GeoDataFrame:
-    """Filter and spatially clip census sections for a network's nodes."""
+    """
+    Filter and spatially clip census sections for a network's nodes.
+
+    Parameters
+    ----------
+    secc : gpd.GeoDataFrame
+        Census-section rows.
+    nodes_utm : gpd.GeoDataFrame
+        Projected network nodes.
+    filter_by_codes : dict | None
+        Optional geographic code filters.
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Sections retained by code filters and the node bounding box.
+
+    Raises
+    ------
+    RuntimeError
+        If code filtering removes every section.
+    """
     if filter_by_codes:
         secc_region = filter_sections_by_codes(secc, filter_by_codes)
         logger.info("Sections after code filter: %s", len(secc_region))
@@ -268,7 +406,21 @@ def _build_adjacency_dataset(
     edges_utm: gpd.GeoDataFrame,
     new_edges: list[dict[str, object]],
 ) -> pd.DataFrame:
-    """Build an edge table with a distance for every usable network edge."""
+    """
+    Build an edge table with a distance for every usable network edge.
+
+    Parameters
+    ----------
+    edges_utm : gpd.GeoDataFrame
+        Existing projected network edges.
+    new_edges : list[dict[str, object]]
+        Additional edge records created while splitting long edges.
+
+    Returns
+    -------
+    pd.DataFrame
+        Adjacency records with ``u``, ``v``, and ``distance`` columns.
+    """
     adjacency_records = []
     for _idx, edge in edges_utm.iterrows():
         if "u" not in edge or "v" not in edge:
@@ -402,7 +554,21 @@ def build_dataset_for_place(
 
 
 def _cusec_matches_filters(cusec: str, filter_by_codes: dict) -> bool:
-    """Return whether a CUSEC code satisfies the requested geographic filters."""
+    """
+    Return whether a CUSEC code satisfies requested geographic filters.
+
+    Parameters
+    ----------
+    cusec : str
+        Ten-digit census-section code.
+    filter_by_codes : dict
+        Geographic code filters such as ``CPRO`` or ``CMUN``.
+
+    Returns
+    -------
+    bool
+        Whether every recognized filter matches the code.
+    """
     code_values = {
         "CUSEC": cusec,
         "CPRO": cusec[:2],
@@ -419,7 +585,28 @@ def _load_population_counts(
     population_file: Path,
     filter_by_codes: dict | None,
 ) -> dict[str, float]:
-    """Load and aggregate the latest available population count per CUSEC."""
+    """
+    Load and aggregate the latest available population count per CUSEC.
+
+    Parameters
+    ----------
+    population_file : Path
+        Population CSV path.
+    filter_by_codes : dict | None
+        Optional geographic filters applied to CUSEC codes.
+
+    Returns
+    -------
+    dict[str, float]
+        CUSEC code to aggregated population count.
+
+    Raises
+    ------
+    KeyError
+        If the population file lacks the ``Secciones`` column.
+    ValueError
+        If no population value column can be identified.
+    """
     logger.info("Loading population data from %s", population_file)
     try:
         pop_df: Any = pd.read_csv(population_file, encoding="utf-8", sep=";", dtype=str)
@@ -483,7 +670,27 @@ def _generate_population_points(
     gaussian_std_m: float,
     rng: np.random.Generator,
 ) -> tuple[list[dict[str, object]], int]:
-    """Generate Gaussian-distributed person coordinates around network nodes."""
+    """
+    Generate Gaussian-distributed person coordinates around network nodes.
+
+    Parameters
+    ----------
+    nodes_with_cusec : gpd.GeoDataFrame
+        Network nodes joined to CUSEC codes.
+    cusec_population : dict[str, float]
+        Population count per CUSEC.
+    gaussian_std_m : float
+        Standard deviation of x/y offsets in meters.
+    rng : np.random.Generator
+        Random generator used for offsets.
+
+    Returns
+    -------
+    persons : list[dict[str, object]]
+        Generated person records with projected coordinates and node IDs.
+    total_population : int
+        Sum of positive population counts represented.
+    """
     all_persons: list[dict[str, object]] = []
     total_population = 0
     for cusec, cusec_nodes in cast("Any", nodes_with_cusec.groupby("CUSEC")):

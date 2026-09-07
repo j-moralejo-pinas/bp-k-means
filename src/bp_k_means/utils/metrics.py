@@ -4,7 +4,21 @@ import numpy as np
 
 
 def overall_wcss(X: np.ndarray, labels: np.ndarray) -> float:
-    """Calculate the total within-cluster sum of squares."""
+    """
+    Calculate the total within-cluster sum of squares.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Feature matrix with shape ``(n_samples, n_features)``.
+    labels : np.ndarray
+        Cluster identifier for each row of ``X``.
+
+    Returns
+    -------
+    float
+        Sum of squared distances from each point to its cluster centroid.
+    """
     k = labels.max() + 1
     wcss = 0.0
 

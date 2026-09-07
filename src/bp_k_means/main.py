@@ -16,7 +16,50 @@ EnumValue = TypeVar("EnumValue", bound=Enum)
 
 @dataclass(frozen=True)
 class ExperimentConfig:
-    """Configuration for a reproducible benchmark run."""
+    """
+    Configuration for a reproducible benchmark run.
+
+    Attributes
+    ----------
+    datasets_dir : Path
+        Directory containing input parquet datasets.
+    benchmark_output_dir : Path
+        Directory receiving benchmark outputs.
+    analysis_output_dir : Path
+        Directory receiving analysis tables and figures.
+    seed : int
+        Base random seed.
+    k : tuple[float, ...]
+        Requested cluster multipliers or special target counts.
+    n_inits : tuple[int, ...]
+        Initialization counts to benchmark.
+    subsample_size : int
+        Maximum subsample size for subsampled k-means++.
+    bp_ranking_metrics : tuple[RankingMetric, ...]
+        BP-KMeans ranking metrics.
+    bp_init_strategies : tuple[InitStrategy, ...]
+        BP-KMeans initialization strategies.
+    bp_init_algorithms : tuple[InitAlgorithm, ...]
+        BP-KMeans initialization algorithms.
+    run_regular : bool
+        Whether the regular benchmark stage is enabled.
+    run_hac_strength : bool
+        Whether the HAC-strength benchmark stage is enabled.
+    run_special : bool
+        Whether the special benchmark stage is enabled.
+    include_cop_kmeans : bool
+        Whether COP-KMeans is included.
+    include_hac : bool
+        Whether HAC is included.
+    skip_existing : bool
+        Whether existing run outputs are skipped.
+    include_bisecting_kmeans : bool
+        Whether standard bisecting K-Means is included.
+    include_bisecting_kmeans_m_rl : bool
+        Whether M_RL bisecting K-Means is included.
+    include_bp_kmeans : bool
+        Whether BP-KMeans is included.
+    """
 
     datasets_dir: Path
     benchmark_output_dir: Path
@@ -40,6 +83,28 @@ class ExperimentConfig:
 
 
 def _resolve_path(value: object, config_path: Path, field_name: str) -> Path:
+    """
+    Resolve a configuration path relative to its TOML file.
+
+    Parameters
+    ----------
+    value : object
+        Raw configuration value.
+    config_path : Path
+        Path to the configuration file.
+    field_name : str
+        Name used in validation errors.
+
+    Returns
+    -------
+    Path
+        Absolute resolved path.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is not a non-empty string.
+    """
     if not isinstance(value, str) or not value:
         msg = f"{field_name} must be a non-empty string"
         raise ValueError(msg)
@@ -52,6 +117,28 @@ def _read_positive_values[Number: (int, float)](
     field_name: str,
     value_type: type[Number],
 ) -> tuple[Number, ...]:
+    """
+    Read a non-empty sequence of positive typed values.
+
+    Parameters
+    ----------
+    value : object
+        Raw list or tuple from the configuration.
+    field_name : str
+        Name used in validation errors.
+    value_type : type[Number]
+        Callable converting each item.
+
+    Returns
+    -------
+    tuple[Number, ...]
+        Converted positive values.
+
+    Raises
+    ------
+    ValueError
+        If the value is empty or contains a non-positive item.
+    """
     if not isinstance(value, (list, tuple)) or not value:
         msg = f"{field_name} must be a non-empty array"
         raise ValueError(msg)
@@ -64,18 +151,59 @@ def _read_positive_values[Number: (int, float)](
 
 
 def _required_setting(settings: dict, field_name: str) -> Any:
-    """Return a required benchmark setting with a useful validation error."""
+    """
+    Return a required benchmark setting with a useful validation error.
+
+    Parameters
+    ----------
+    settings : dict
+        Benchmark settings mapping.
+    field_name : str
+        Required key.
+
+    Returns
+    -------
+    Any
+        Setting value.
+
+    Raises
+    ------
+    ValueError
+        If ``field_name`` is absent.
+    """
     if field_name not in settings:
         msg = f"missing required benchmark setting: {field_name}"
         raise ValueError(msg)
     return settings[field_name]
 
 
-def _read_enum_values(
+def _read_enum_values[EnumValue: Enum](
     value: object,
     field_name: str,
     enum_type: type[EnumValue],
 ) -> tuple[EnumValue, ...]:
+    """
+    Read a non-empty sequence of enum member names.
+
+    Parameters
+    ----------
+    value : object
+        Raw list or tuple of enum names.
+    field_name : str
+        Name used in validation errors.
+    enum_type : type[EnumValue]
+        Enum class used for conversion.
+
+    Returns
+    -------
+    tuple[EnumValue, ...]
+        Converted enum members.
+
+    Raises
+    ------
+    ValueError
+        If the value is empty or contains an unknown member name.
+    """
     if not isinstance(value, (list, tuple)) or not value:
         msg = f"{field_name} must be a non-empty array of enum names"
         raise ValueError(msg)
@@ -89,7 +217,26 @@ def _read_enum_values(
 
 
 def load_config(config_path: Path) -> ExperimentConfig:
-    """Load and validate an experiment configuration from TOML."""
+    """
+    Load and validate an experiment configuration from TOML.
+
+    Parameters
+    ----------
+    config_path : Path
+        TOML configuration file.
+
+    Returns
+    -------
+    ExperimentConfig
+        Validated immutable benchmark configuration.
+
+    Raises
+    ------
+    TypeError
+        If the TOML structure is invalid.
+    ValueError
+        If a required setting is absent or invalid.
+    """
     with config_path.open("rb") as config_file:
         raw_config = tomllib.load(config_file)
 
@@ -164,6 +311,19 @@ def load_config(config_path: Path) -> ExperimentConfig:
 
 
 def _config_for_json(config: ExperimentConfig) -> dict[str, object]:
+    """
+    Serialize an experiment configuration to JSON-compatible values.
+
+    Parameters
+    ----------
+    config : ExperimentConfig
+        Configuration to serialize.
+
+    Returns
+    -------
+    dict[str, object]
+        Mapping containing strings, numbers, booleans, lists, and enum names.
+    """
     serialized = asdict(config)
     serialized["datasets_dir"] = str(config.datasets_dir)
     serialized["benchmark_output_dir"] = str(config.benchmark_output_dir)
@@ -177,7 +337,16 @@ def _config_for_json(config: ExperimentConfig) -> dict[str, object]:
 
 
 def run_experiment(config: ExperimentConfig, *, config_name: str | None = None) -> None:
-    """Run all benchmark stages selected by ``config``."""
+    """
+    Run all benchmark stages selected by ``config``.
+
+    Parameters
+    ----------
+    config : ExperimentConfig
+        Benchmark configuration.
+    config_name : str | None
+        Name recorded in the experiment manifest.
+    """
     config.benchmark_output_dir.mkdir(parents=True, exist_ok=True)
     manifest = {
         "config_file": config_name,

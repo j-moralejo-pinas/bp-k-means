@@ -1,24 +1,44 @@
 """COP-KMeans: a specialized label-constrained K-means implementation."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 import numpy as np
-from numpy.typing import ArrayLike
 
 from bp_k_means.algos.base_algo import BaseAlgo
 from bp_k_means.utils.logging import logger
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
+    from numpy.typing import ArrayLike, NDArray
 
 
 def _assign_points(
-    X: "NDArray",
-    y: "NDArray",
-    centroids: "NDArray",
-    labels: "NDArray",
-) -> tuple["NDArray", bool] | None:
-    """Assign points to the nearest feasible cluster."""
+    X: NDArray,
+    y: NDArray,
+    centroids: NDArray,
+    labels: NDArray,
+) -> tuple[NDArray, bool] | None:
+    """
+    Assign points to the nearest feasible cluster.
+
+    Parameters
+    ----------
+    X : NDArray
+        Points to assign.
+    y : NDArray
+        Source label for each point.
+    centroids : NDArray
+        Current cluster centroids.
+    labels : NDArray
+        Mutable current cluster assignments.
+
+    Returns
+    -------
+    tuple[NDArray, bool] | None
+        Updated labels and a flag indicating whether any assignment changed.
+        ``None`` is returned when no feasible cluster exists for a point.
+    """
     changed = False
     for idx in range(len(X)):
         distances = np.sum((X[idx] - centroids) ** 2, axis=1)
@@ -41,12 +61,30 @@ def _assign_points(
 
 
 def _update_centroids(
-    X: "NDArray",
-    labels: "NDArray",
-    centroids: "NDArray",
+    X: NDArray,
+    labels: NDArray,
+    centroids: NDArray,
     rng: np.random.Generator,
-) -> "NDArray":
-    """Recompute centroids and reseed empty clusters."""
+) -> NDArray:
+    """
+    Recompute centroids and reseed empty clusters.
+
+    Parameters
+    ----------
+    X : NDArray
+        Input points.
+    labels : NDArray
+        Current cluster assignment for each point.
+    centroids : NDArray
+        Current centroid matrix, used to determine the number of clusters.
+    rng : np.random.Generator
+        Generator used to reseed empty clusters.
+
+    Returns
+    -------
+    NDArray
+        Updated centroid matrix.
+    """
     new_centroids = np.zeros_like(centroids)
     for cluster_idx in range(len(centroids)):
         points = X[labels == cluster_idx]
@@ -57,21 +95,42 @@ def _update_centroids(
 
 
 def cop_kmeans_cannot_link(
-    X: "NDArray",
-    y: "NDArray",
+    X: NDArray,
+    y: NDArray,
     k: int,
     max_iter: int = 300,
     *,
     seed: int | np.random.Generator,
     init_ensure_label: bool = True,
-) -> tuple["NDArray", "NDArray"] | tuple[None, None]:
+) -> tuple[NDArray, NDArray] | tuple[None, None]:
     """
     Cluster points while enforcing cannot-link constraints between labels.
 
-    X: array (n, d)
-    y: labels, integer or string
-    k: number of clusters
-    init_ensure_label: if True, ensures at least one centroid per label.
+    Parameters
+    ----------
+    X : NDArray
+        Input points with shape ``(n_samples, n_features)``.
+    y : NDArray
+        Source label for each point.
+    k : int
+        Number of clusters.
+    max_iter : int
+        Maximum number of assignment/update iterations.
+    seed : int | np.random.Generator
+        Random seed or generator used for initialization.
+    init_ensure_label : bool
+        Whether to initialize at least one centroid from every source label.
+
+    Returns
+    -------
+    tuple[NDArray, NDArray] | tuple[None, None]
+        Feasible cluster assignments and centroids, or ``None`` values when
+        no feasible assignment exists.
+
+    Raises
+    ------
+    ValueError
+        If ``k`` is smaller than the number of unique source labels.
     """
     X = np.asarray(X)
     y = np.asarray(y)
@@ -122,14 +181,51 @@ def cop_kmeans_cannot_link(
 
 
 class COPKMeansCannotLink(BaseAlgo):
-    """Specialized K-means with cannot-link constraints between source labels."""
+    """
+    Specialized K-means with cannot-link constraints between source labels.
+
+    Parameters
+    ----------
+    max_iter : int
+        Maximum number of assignment/update iterations per initialization.
+    seed : int | np.random.Generator
+        Random seed or generator shared by the fitting implementation.
+    n_init : int
+        Number of independent fitting attempts.
+    init_ensure_label : bool
+        Whether initialization includes one centroid per source label.
+
+    Attributes
+    ----------
+    max_iter : int
+        Maximum number of assignment/update iterations per initialization.
+    init_ensure_label : bool
+        Whether initialization includes one centroid per source label.
+    """
+
+    max_iter: int
+    init_ensure_label: bool
 
     def predict(
         self,
         X: ArrayLike,
         y: ArrayLike,
-    ) -> "NDArray":
-        """Assign instances to the nearest feasible fitted cluster."""
+    ) -> NDArray:
+        """
+        Assign instances to the nearest feasible fitted cluster.
+
+        Parameters
+        ----------
+        X : ArrayLike
+            Feature matrix to predict.
+        y : ArrayLike
+            Source label for each input row.
+
+        Returns
+        -------
+        NDArray
+            Predicted compatible cluster identifier for each row.
+        """
         return self._predict_nearest_centroid(X, y)
 
     def __init__(
@@ -140,19 +236,6 @@ class COPKMeansCannotLink(BaseAlgo):
         n_init: int,
         init_ensure_label: bool = True,
     ) -> None:
-        """Initialize COP-KMeans.
-
-        Parameters
-        ----------
-        max_iter : int
-            Maximum number of assignment/update iterations per initialization.
-        seed : int | np.random.Generator
-            Seed or random generator used by the algorithm.
-        n_init : int
-            Number of independent initializations.
-        init_ensure_label : bool
-            Whether initialization must include one centroid per label.
-        """
         super().__init__(seed=seed, n_init=n_init)
         self.max_iter = max_iter
         self.init_ensure_label = init_ensure_label
@@ -162,8 +245,9 @@ class COPKMeansCannotLink(BaseAlgo):
         X: ArrayLike,
         y: ArrayLike,
         target_k: int,
-    ) -> "COPKMeansCannotLink":
-        """Fit COP-KMeans and store the best feasible result.
+    ) -> COPKMeansCannotLink:
+        """
+        Fit COP-KMeans and store the best feasible result.
 
         Parameters
         ----------
@@ -181,10 +265,15 @@ class COPKMeansCannotLink(BaseAlgo):
 
         Raises
         ------
-        ValueError
-            If the requested cluster count is infeasible.
         RuntimeError
             If no initialization produces a feasible clustering.
+
+        Attributes
+        ----------
+        labels_ : NDArray
+            Labels from the best feasible initialization.
+        centroids_ : NDArray
+            Centroids from the best feasible initialization.
         """
         X_array = np.asarray(X)
         y_array = np.asarray(y)
